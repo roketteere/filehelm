@@ -56,5 +56,5 @@ to create it.
 ## Implementation
 
 Pure Node + `better-sqlite3` (synchronous SQLite — perfect for a
-CLI). Single `bin/helm.mjs`. No build step. Add to `IDEAS.md` if
-you want subcommands extended.
+CLI). Single `bin/helm.mjs`. No build step. Open an issue if you
+want subcommands extended.

@@ -32,3 +32,10 @@ desktop.ini
 
 # Local app data (shouldn't appear in repo but just in case)
 .filehelm/
+
+# Internal working notes — Joel's chronological ideas log, the
+# session-brief for Claude, and the internal release runbook. Kept
+# locally for our own reference but not shipped to the public repo.
+IDEAS.md
+CLAUDE.md
+RELEASING.md

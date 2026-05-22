@@ -282,7 +282,8 @@ public, multi-platform build.
 > 4th matrix job (macOS Intel) finishes and the canonical
 > `latest.json` lands on the release.
 
-See `RELEASING.md` for the cut-a-new-release flow.
+Maintainers cut new releases by pushing a `filehelm-vX.Y.Z` tag —
+the `.github/workflows/release.yml` matrix workflow does the rest.
 
 ### Run from source
 
@@ -521,8 +522,8 @@ GitHub Secret. Don't ever push the private key.
 | 3.1 | Commander upgrades: toolbar + zip/unzip + multi-select + Commander header button | shipped |
 | 3.2 | Right-click context menus across the app | shipped |
 
-See [`IDEAS.md`](./IDEAS.md) for the full chronological ledger and
-[`docs/GUIDE.md`](./docs/GUIDE.md) for the deep user guide.
+See [`docs/GUIDE.md`](./docs/GUIDE.md) for the deep user guide and
+[`CHANGELOG.md`](./CHANGELOG.md) for release-by-release changes.
 
 ---
 
@@ -647,8 +648,7 @@ we can keep selling commercial licenses without per-customer
 consent forms.
 
 For non-trivial changes, please open an issue first to align on
-direction. The session-brief at [`CLAUDE.md`](./CLAUDE.md) is the
-fastest way to come up to speed on the codebase.
+direction.
 
 ---
 
@@ -676,8 +676,8 @@ FileHelm is **dual-licensed**:
 | **Claude (Opus 4.7)** — Anthropic | Pair programmer, backend + frontend code, docs co-author |
 
 Every commit in this repo is one of us. Co-authorship is captured
-in the commit trailers; the README, guide, and CLAUDE.md byline
-both names because that's how it was actually built.
+in the commit trailers; the README + guide byline both names
+because that's how it was actually built.
 
 <div align="center">
 

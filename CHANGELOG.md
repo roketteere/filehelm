@@ -84,8 +84,9 @@ First public release; the first FileHelm build that's not Windows-only.
 
 ## [0.1.0] — Initial Windows-only build (never publicly released)
 
-Phases 1 through 3.2 from the project's chronological ledger
-(see [`IDEAS.md`](./IDEAS.md) for the per-phase commits). Highlights:
+Phases 1 through 3.2 of the project's internal roadmap, collapsed
+here into a single retro since 0.1.0 was never publicly cut.
+Highlights:
 
 - Project scanner (15+ languages, 12+ frameworks; manifest-hash
   signature for incremental rescans)

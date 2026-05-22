@@ -854,6 +854,6 @@ free**. Email above and we'll tell you.
 ## What's next
 
 The original 25-item backlog is fully shipped. Ongoing work is
-polish on shipped surfaces — see [`IDEAS.md`](../IDEAS.md) for the
-chronological ledger. Open an issue or PR on
+polish on shipped surfaces — see [`CHANGELOG.md`](../CHANGELOG.md)
+for release-by-release changes. Open an issue or PR on
 <https://github.com/roketteere/filehelm> to suggest more.
