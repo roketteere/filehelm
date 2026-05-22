@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import rehypeHighlight from "rehype-highlight";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -21,7 +22,7 @@ export function MarkdownPreview({ source, emptyHint }: Props) {
       <div className="px-6 py-5 prose-helm">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
+          rehypePlugins={[rehypeRaw, rehypeHighlight]}
           components={{
             a: ({ ...props }) => (
               <a
