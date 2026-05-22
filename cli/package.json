@@ -1,0 +1,22 @@
+{
+  "name": "filehelm-cli",
+  "version": "0.1.0",
+  "description": "CLI companion for FileHelm — list and launch projects from any terminal.",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "helm": "./bin/helm.mjs"
+  },
+  "scripts": {
+    "start": "node bin/helm.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
+  }
+}
