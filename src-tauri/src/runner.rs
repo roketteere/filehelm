@@ -1,0 +1,160 @@
+//! Run a project action by spawning a terminal.
+//!
+//! Phase 1: external terminal only. We prefer Windows Terminal (`wt.exe`)
+//! and fall back to `cmd.exe /K`. The command is run with the specified
+//! working directory so relative paths work.
+
+use std::path::Path;
+use std::process::Command;
+
+use crate::error::{AppError, AppResult};
+
+#[derive(Debug, Clone, Copy)]
+pub enum TerminalChoice {
+    Auto,
+    #[allow(dead_code)]
+    WindowsTerminal,
+    #[allow(dead_code)]
+    Cmd,
+    #[allow(dead_code)]
+    Powershell,
+}
+
+pub fn spawn_external(working_dir: &Path, command: &str, choice: TerminalChoice) -> AppResult<()> {
+    if !working_dir.exists() {
+        return Err(AppError::Invalid(format!(
+            "working_dir does not exist: {}",
+            working_dir.display()
+        )));
+    }
+    if command.trim().is_empty() {
+        return Err(AppError::Invalid("empty command".into()));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        match choice {
+            TerminalChoice::Auto | TerminalChoice::WindowsTerminal => {
+                // Try Windows Terminal first.
+                let res = Command::new("wt.exe")
+                    .arg("-d")
+                    .arg(working_dir)
+                    .args(["pwsh", "-NoExit", "-Command"])
+                    .arg(command)
+                    .spawn();
+                if res.is_ok() {
+                    return Ok(());
+                }
+                // Fall back to cmd.exe.
+                fallback_cmd(working_dir, command)
+            }
+            TerminalChoice::Powershell => {
+                Command::new("pwsh")
+                    .args(["-NoExit", "-Command", command])
+                    .current_dir(working_dir)
+                    .spawn()?;
+                Ok(())
+            }
+            TerminalChoice::Cmd => fallback_cmd(working_dir, command),
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = choice;
+        // Best-effort: spawn user's $SHELL via xterm.
+        Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .current_dir(working_dir)
+            .spawn()?;
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn fallback_cmd(working_dir: &Path, command: &str) -> AppResult<()> {
+    Command::new("cmd.exe")
+        .args(["/C", "start", "cmd.exe", "/K", command])
+        .current_dir(working_dir)
+        .spawn()?;
+    Ok(())
+}
+
+pub fn open_editor(project_path: &Path) -> AppResult<()> {
+    // Prefer VS Code via PATH (`code`). Falls back to opening the folder
+    // in Explorer (Windows) — the frontend tauri-plugin-opener can be used
+    // for richer URL/file handling.
+    #[cfg(target_os = "windows")]
+    {
+        // `code` is a .cmd shim on Windows; spawn via cmd.exe so PATH/.cmd works.
+        let res = Command::new("cmd.exe")
+            .args(["/C", "code"])
+            .arg(project_path)
+            .spawn();
+        if res.is_ok() {
+            return Ok(());
+        }
+        // Last-resort fallback.
+        Command::new("explorer.exe").arg(project_path).spawn()?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if Command::new("code").arg(project_path).spawn().is_ok() {
+            return Ok(());
+        }
+        Err(AppError::Invalid(
+            "VS Code (`code` on PATH) not found".into(),
+        ))
+    }
+}
+
+pub fn open_terminal_at(working_dir: &Path) -> AppResult<()> {
+    #[cfg(target_os = "windows")]
+    {
+        let res = Command::new("wt.exe").arg("-d").arg(working_dir).spawn();
+        if res.is_ok() {
+            return Ok(());
+        }
+        Command::new("cmd.exe")
+            .args(["/C", "start", "cmd.exe", "/K", "cd /d"])
+            .arg(working_dir)
+            .spawn()?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = working_dir;
+        Ok(())
+    }
+}
+
+pub fn reveal_in_explorer(target_path: &Path) -> AppResult<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(target_path)
+            .spawn()?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = target_path;
+        Ok(())
+    }
+}
+
+pub fn open_in_explorer(target_path: &Path) -> AppResult<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer.exe").arg(target_path).spawn()?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = target_path;
+        Ok(())
+    }
+}
