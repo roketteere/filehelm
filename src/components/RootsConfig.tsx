@@ -128,7 +128,7 @@ export function RootsConfig({
                   <div className="flex items-center gap-2">
                     <div className="truncate font-mono text-xs">{r.abs_path}</div>
                     <span
-                      className="shrink-0 rounded-full bg-helm-500/15 px-1.5 py-0.5 text-[10px] font-medium text-helm-300"
+                      className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary"
                       title="Projects detected under this root"
                     >
                       {projectCount[r.id] ?? 0} project

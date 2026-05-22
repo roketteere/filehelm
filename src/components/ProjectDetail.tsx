@@ -204,7 +204,7 @@ export function ProjectDetail({ project, onRescanned }: Props) {
                     <li key={a.id}>
                       <button
                         onClick={() => runAction(a)}
-                        className="group flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-all hover:border-helm-500/60 hover:shadow-[0_0_0_1px_hsl(var(--ring)/0.25)]"
+                        className="group flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-all hover:border-primary/60 hover:shadow-[0_0_0_1px_hsl(var(--ring)/0.25)]"
                       >
                         <span className={cn(
                           "grid h-9 w-9 place-items-center rounded-md",
@@ -226,7 +226,7 @@ export function ProjectDetail({ project, onRescanned }: Props) {
                             from {a.source}
                           </div>
                         </div>
-                        <Play className="h-4 w-4 shrink-0 text-helm-400 opacity-0 transition-opacity group-hover:opacity-100" />
+                        <Play className="h-4 w-4 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
                       </button>
                     </li>
                   ))}
@@ -273,7 +273,7 @@ function iconForKind(kind: string) {
 function kindColor(kind: string) {
   switch (kind) {
     case "dev":
-      return "bg-helm-500/15 text-helm-300";
+      return "bg-primary/15 text-primary";
     case "build":
       return "bg-amber-500/15 text-amber-300";
     case "test":

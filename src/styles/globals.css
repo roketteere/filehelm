@@ -1,71 +1,51 @@
+/* Theme palettes (Tokyo Night, Dracula, Catppuccin Mocha, Gruvbox Dark,
+   Nord, Synthwave '84, GitHub Dark, Solarized Light) — applied via
+   <html data-theme="..."> by src/lib/theme.ts. Must come before
+   @tailwind so the cascade order is correct. */
+@import "./themes.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ----------------------------------------------------------------------
-   filehelm theme — based on shadcn/ui zinc baseline, customised with a
-   teal/cyan accent ("helm") and tightened density for a "banger" feel.
----------------------------------------------------------------------- */
-
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 188 94% 38%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 188 94% 38%;
-    --radius: 0.625rem;
-  }
-
-  .dark {
-    --background: 240 10% 5%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 7%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 7%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 188 94% 50%;
-    --primary-foreground: 240 10% 5%;
-    --secondary: 240 4% 12%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 4% 12%;
-    --muted-foreground: 240 5% 64%;
-    --accent: 240 4% 14%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 188 94% 50%;
-  }
-
   * {
     @apply border-border;
   }
   html, body, #root {
     @apply h-full;
   }
+  html {
+    /* Reasonable default so the first paint isn't unstyled if JS hasn't
+       applied the stored theme yet. */
+    --background: 232 19% 13%;
+    --foreground: 229 73% 86%;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    position: relative;
+  }
+  /* Per-theme texture/pattern overlay. Lives behind every UI element so
+     hierarchy is still readable; tuned per-theme via --pattern-opacity. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: var(--pattern-image, none);
+    background-repeat: repeat;
+    opacity: var(--pattern-opacity, 0);
+    pointer-events: none;
+    z-index: 0;
+    mix-blend-mode: overlay;
+  }
+  /* Make sure app shell sits above the pattern. */
+  #root {
+    position: relative;
+    z-index: 1;
   }
 }
 
-/* Subtle scrollbar styling — banger detail. */
 @layer base {
   ::-webkit-scrollbar {
     width: 10px;
@@ -87,7 +67,7 @@
   }
 }
 
-/* Markdown prose tweaks */
+/* Markdown prose tweaks (theme-aware via the CSS vars). */
 .prose-helm {
   @apply prose prose-invert prose-zinc max-w-none;
 }
@@ -101,5 +81,9 @@
   @apply bg-secondary px-1 py-0.5 rounded text-xs font-mono;
 }
 .prose-helm a {
-  @apply text-helm-400 no-underline hover:underline;
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+.prose-helm a:hover {
+  text-decoration: underline;
 }

@@ -182,7 +182,7 @@ function RootHeader({
       ) : (
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform" />
       )}
-      <FolderTree className="h-3.5 w-3.5 shrink-0 text-helm-400" />
+      <FolderTree className="h-3.5 w-3.5 shrink-0 text-primary" />
       <div className="min-w-0 flex-1 truncate font-mono text-[11px] leading-tight">
         <span className="text-muted-foreground/70">
           {parents.map((s, i) => (
@@ -198,7 +198,7 @@ function RootHeader({
         className={cn(
           "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
           isQueryActive && visibleCount !== total
-            ? "bg-helm-500/15 text-helm-300"
+            ? "bg-primary/15 text-primary"
             : "bg-muted text-muted-foreground",
         )}
       >
@@ -230,7 +230,7 @@ function ProjectRow({
       onClick={onClick}
       className={cn(
         "group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60",
-        selected && "bg-accent text-accent-foreground ring-1 ring-helm-500/40",
+        selected && "bg-accent text-accent-foreground ring-1 ring-primary/40",
       )}
     >
       <div className="flex shrink-0 items-center -space-x-1">
@@ -247,7 +247,7 @@ function ProjectRow({
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium">{project.name}</span>
           {project.pinned && (
-            <Pin className="h-3 w-3 text-helm-400" aria-label="pinned" />
+            <Pin className="h-3 w-3 text-primary" aria-label="pinned" />
           )}
         </div>
         <div className="truncate text-[10px] text-muted-foreground">

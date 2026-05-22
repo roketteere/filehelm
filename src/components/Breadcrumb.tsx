@@ -95,7 +95,7 @@ export function Breadcrumb({
               aria-label="Copy full path"
             >
               {copied ? (
-                <Check className="h-3.5 w-3.5 text-helm-400" />
+                <Check className="h-3.5 w-3.5 text-primary" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}
