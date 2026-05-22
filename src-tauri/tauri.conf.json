@@ -40,7 +40,7 @@
       "icons/icon.ico"
     ],
     "publisher": "Joel Perez (@roketteere)",
-    "copyright": "© 2026 Joel Perez (@roketteere) & Claude (Opus 4.7). MIT-licensed.",
+    "copyright": "© 2026 Joel Perez (@roketteere) & Claude (Opus 4.7). PolyForm Noncommercial + Commercial dual-licensed — see LICENSE / COMMERCIAL.md.",
     "category": "DeveloperTool",
     "shortDescription": "Local project launcher + file commander",
     "longDescription": "FileHelm — auto-detects your dev projects' languages and run commands, launches them with one click. Includes a dual-pane file commander."

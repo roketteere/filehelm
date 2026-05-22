@@ -7,7 +7,7 @@ authors = [
     "Claude (Opus 4.7) <noreply@anthropic.com>",
 ]
 repository = "https://github.com/roketteere/filehelm"
-license = "MIT"
+license-file = "../LICENSE"
 edition = "2021"
 rust-version = "1.78"
 

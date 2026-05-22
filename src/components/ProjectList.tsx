@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Code2,
   Copy,
+  Folder,
   FolderOpen,
   FolderTree,
   ImagePlus,
@@ -151,6 +152,26 @@ export function ProjectList({
           className="pl-8"
         />
       </div>
+
+      {(roots.length > 0 || projects.length > 0) && (
+        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px]">
+          <Folder className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+          <span className="font-semibold tabular-nums text-sky-300">
+            {projects.length}
+          </span>
+          <span className="text-muted-foreground">
+            project{projects.length === 1 ? "" : "s"}
+          </span>
+          <span className="text-muted-foreground/40">·</span>
+          <FolderTree className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+          <span className="font-semibold tabular-nums text-rose-300">
+            {roots.length}
+          </span>
+          <span className="text-muted-foreground">
+            root{roots.length === 1 ? "" : "s"}
+          </span>
+        </div>
+      )}
 
       <ScrollArea className="mt-2 flex-1">
         <div className="px-2 pb-3">
@@ -309,7 +330,7 @@ function RootHeader({
       ) : (
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform" />
       )}
-      <FolderTree className="h-3.5 w-3.5 shrink-0 text-primary" />
+      <FolderTree className="h-4 w-4 shrink-0 fill-rose-500/20 text-rose-400 drop-shadow-[0_0_4px_rgba(244,63,94,0.35)]" />
       <div className="min-w-0 flex-1 truncate font-mono text-[11px] leading-tight">
         <span className="text-muted-foreground/70">
           {parents.map((s, i) => (
@@ -323,15 +344,18 @@ function RootHeader({
       </div>
       <span
         className={cn(
-          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+          "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
           isQueryActive && visibleCount !== total
-            ? "bg-primary/15 text-primary"
-            : "bg-muted text-muted-foreground",
+            ? "border-primary/30 bg-primary/10 text-primary"
+            : "border-sky-500/30 bg-sky-500/10 text-sky-300",
         )}
       >
-        {isQueryActive && visibleCount !== total
-          ? `${visibleCount} / ${total}`
-          : total}
+        <Folder className="h-2.5 w-2.5 shrink-0 fill-current opacity-80" />
+        <span className="tabular-nums">
+          {isQueryActive && visibleCount !== total
+            ? `${visibleCount} / ${total}`
+            : total}
+        </span>
       </span>
     </button>
   );

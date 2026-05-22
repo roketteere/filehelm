@@ -9,7 +9,7 @@
     "Joel Perez (@roketteere) <jxp489@gmail.com>",
     "Claude (Opus 4.7) <noreply@anthropic.com>"
   ],
-  "license": "MIT",
+  "license": "SEE LICENSE IN ../LICENSE",
   "bin": {
     "helm": "./bin/helm.mjs"
   },
