@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "gen:icons": "node scripts/gen-icons.mjs && tauri icon src-tauri/icons/source.png"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",
@@ -40,6 +41,7 @@
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/typography": "^0.5.16",
     "@tauri-apps/cli": "^2.1.0",
     "@types/node": "^22.10.5",

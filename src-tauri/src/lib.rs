@@ -6,9 +6,11 @@ mod db;
 mod error;
 mod runner;
 mod scanner;
+mod tray;
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use tauri::{Emitter, WindowEvent};
 use tracing_subscriber::EnvFilter;
 
 /// Application state shared across Tauri commands.
@@ -33,7 +35,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .setup(|_app| {
+        .setup(|app| {
+            let handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
                 let data_dir = filehelm_data_dir()?;
                 std::fs::create_dir_all(&data_dir)?;
@@ -44,7 +47,22 @@ pub fn run() {
                 tracing::info!("filehelm initialized");
                 Ok::<_, anyhow::Error>(())
             })?;
+            // Build the system tray icon (Windows notification area).
+            if let Err(e) = tray::build(&handle) {
+                tracing::warn!(error = ?e, "tray build failed");
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Intercept the X button: hide to tray rather than exit.
+            // (Quit is reachable from the tray menu.)
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    let _ = window.emit("filehelm:hidden-to-tray", ());
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_roots,

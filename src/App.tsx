@@ -8,6 +8,7 @@ import { ProjectDetail } from "@/components/ProjectDetail";
 import { RootsConfig } from "@/components/RootsConfig";
 import { GithubDialog } from "@/components/GithubDialog";
 import { ThemePicker } from "@/components/ThemePicker";
+import { TitleBar } from "@/components/TitleBar";
 import { applyStoredTheme } from "@/lib/theme";
 import { ipc } from "@/lib/ipc";
 import type { Project, Root } from "@/types";
@@ -80,6 +81,7 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={250}>
       <div className="flex h-full flex-col bg-background">
+        <TitleBar />
         <Header
           rootsCount={roots.length}
           projectCount={projects.length}
