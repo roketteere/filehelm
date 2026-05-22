@@ -9,6 +9,10 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 
 ## [Unreleased]
 
+(nothing yet)
+
+## [0.2.1] — 2026-05-22
+
 ### Added
 
 - **Quick View + Quick Edit in the file commander** — F3 / F4 now
@@ -168,6 +172,7 @@ Highlights:
 - OS-global hotkey + Tauri auto-updater scaffold
 - Norton-style dual-pane file commander (MVP) + toolbar upgrades
 
-[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.0...HEAD
+[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.1...HEAD
+[0.2.1]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.1
 [0.2.0]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.0
 [0.1.0]: https://github.com/roketteere/filehelm/commits/c42a2d1
