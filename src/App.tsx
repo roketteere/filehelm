@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FolderCog, Github, RefreshCcw, Loader2, Anchor } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FolderCog, Github, RefreshCcw, Loader2, Anchor, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +9,9 @@ import { RootsConfig } from "@/components/RootsConfig";
 import { GithubDialog } from "@/components/GithubDialog";
 import { ThemePicker } from "@/components/ThemePicker";
 import { TitleBar } from "@/components/TitleBar";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { applyStoredTheme } from "@/lib/theme";
+import { onAction, useKeybinds } from "@/lib/keybinds";
 import { ipc } from "@/lib/ipc";
 import type { Project, Root } from "@/types";
 
@@ -22,8 +24,23 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [rootsOpen, setRootsOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
+
+  // Keybind dispatcher — emits `filehelm:action:<id>` events for the
+  // bindings registered in src/lib/keybinds.ts.
+  useKeybinds();
+
+  // Latest-value refs so the action handlers (which subscribe once)
+  // always see fresh state without re-binding the listener.
+  const projectsRef = useRef(projects);
+  const selectedIdRef = useRef(selectedId);
+  useEffect(() => {
+    projectsRef.current = projects;
+    selectedIdRef.current = selectedId;
+  }, [projects, selectedId]);
 
   const refreshRoots = useCallback(async () => {
     const r = await ipc.listRoots();
@@ -59,7 +76,7 @@ export default function App() {
     [projects, selectedId],
   );
 
-  const scanAll = async () => {
+  const scanAll = useCallback(async () => {
     setScanning(true);
     try {
       for (const r of roots) {
@@ -71,12 +88,81 @@ export default function App() {
     } finally {
       setScanning(false);
     }
-  };
+  }, [roots, refreshProjects]);
 
   const rootsChanged = useCallback(async () => {
     await refreshRoots();
     await refreshProjects();
   }, [refreshRoots, refreshProjects]);
+
+  // ----- Keybind action subscriptions -----
+  useEffect(() => {
+    const offs: Array<() => void> = [];
+
+    const focusSearch = () => {
+      const el = document.getElementById("filehelm-search") as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    };
+
+    offs.push(onAction("focus-search", focusSearch));
+    offs.push(onAction("focus-search-vim", focusSearch));
+    offs.push(onAction("open-settings", () => setSettingsOpen(true)));
+    offs.push(onAction("open-roots", () => setRootsOpen(true)));
+    offs.push(onAction("open-github", () => setGithubOpen(true)));
+    offs.push(onAction("open-theme", () => setThemeOpen((v) => !v)));
+    offs.push(onAction("scan-all", () => scanAll()));
+
+    offs.push(
+      onAction("nav-next", () => {
+        const ps = projectsRef.current;
+        if (ps.length === 0) return;
+        const cur = selectedIdRef.current;
+        const idx = ps.findIndex((p) => p.id === cur);
+        const next = ps[Math.min(ps.length - 1, idx + 1)] ?? ps[0];
+        setSelectedId(next.id);
+      }),
+    );
+    offs.push(
+      onAction("nav-prev", () => {
+        const ps = projectsRef.current;
+        if (ps.length === 0) return;
+        const cur = selectedIdRef.current;
+        const idx = ps.findIndex((p) => p.id === cur);
+        const prev = ps[Math.max(0, idx - 1)] ?? ps[0];
+        setSelectedId(prev.id);
+      }),
+    );
+    offs.push(
+      onAction("run-primary", async () => {
+        const cur = selectedIdRef.current;
+        if (!cur) return;
+        try {
+          const actions = await ipc.projectActions(cur);
+          const primary =
+            actions.find((a) => a.kind === "dev") ??
+            actions.find((a) => a.kind === "run") ??
+            actions[0];
+          if (primary) await ipc.runAction(primary.id);
+        } catch (e) {
+          setBootError(String(e));
+        }
+      }),
+    );
+    offs.push(
+      onAction("escape", () => {
+        // Close whichever dialog is open (last wins; we close all).
+        setSettingsOpen(false);
+        setRootsOpen(false);
+        setGithubOpen(false);
+        setThemeOpen(false);
+      }),
+    );
+
+    return () => offs.forEach((off) => off());
+  }, [scanAll]);
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -89,6 +175,9 @@ export default function App() {
           onScanAll={scanAll}
           onOpenRoots={() => setRootsOpen(true)}
           onOpenGithub={() => setGithubOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          themeOpen={themeOpen}
+          onThemeOpenChange={setThemeOpen}
         />
 
         {bootError && (
@@ -145,6 +234,8 @@ export default function App() {
           setSelectedId(p.id);
         }}
       />
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </TooltipProvider>
   );
 }
@@ -156,6 +247,9 @@ function Header({
   onScanAll,
   onOpenRoots,
   onOpenGithub,
+  onOpenSettings,
+  themeOpen,
+  onThemeOpenChange,
 }: {
   rootsCount: number;
   projectCount: number;
@@ -163,6 +257,9 @@ function Header({
   onScanAll: () => void;
   onOpenRoots: () => void;
   onOpenGithub: () => void;
+  onOpenSettings: () => void;
+  themeOpen: boolean;
+  onThemeOpenChange: (v: boolean) => void;
 }) {
   return (
     <header className="flex h-12 items-center justify-between border-b border-border bg-card/70 px-4 backdrop-blur">
@@ -171,7 +268,7 @@ function Header({
           <Anchor className="h-4 w-4" />
         </span>
         <div className="leading-tight">
-          <div className="text-sm font-semibold tracking-tight">filehelm</div>
+          <div className="text-sm font-semibold tracking-tight">FileHelm</div>
           <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
             project launcher
           </div>
@@ -183,7 +280,7 @@ function Header({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <ThemePicker />
+        <ThemePicker open={themeOpen} onOpenChange={onThemeOpenChange} />
         <Button variant="outline" size="sm" onClick={onOpenGithub}>
           <Github />
           <span className="hidden md:inline">Clone from GitHub</span>
@@ -195,6 +292,15 @@ function Header({
         <Button variant="default" size="sm" onClick={onOpenRoots}>
           <FolderCog />
           Roots
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpenSettings}
+          aria-label="Settings"
+          title="Settings (Ctrl+,)"
+        >
+          <Settings />
         </Button>
       </div>
     </header>
@@ -216,9 +322,9 @@ function EmptyState({
         <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/50 shadow-[0_0_40px_-8px_hsl(var(--ring)/0.5)]">
           <Anchor className="h-7 w-7 text-primary-foreground" />
         </div>
-        <h1 className="text-xl font-semibold tracking-tight">Welcome to filehelm</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Welcome to FileHelm</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Point filehelm at one or more folders that contain your projects and
+          Point FileHelm at one or more folders that contain your projects and
           let it auto-detect each one's language and run commands. Then launch
           anything with one click.
         </p>

@@ -75,9 +75,20 @@ export function ProjectList({ roots, projects, selectedId, onSelect }: Props) {
           aria-hidden
         />
         <Input
+          id="filehelm-search"
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              if (query) {
+                setQuery("");
+                e.stopPropagation();
+              } else {
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }
+          }}
           placeholder={`Search ${projects.length} project${projects.length === 1 ? "" : "s"}…`}
           className="pl-8"
         />

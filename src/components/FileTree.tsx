@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, File, Folder } from "lucide-react";
 import { LanguageIcon } from "@/components/LanguageIcon";
 import { extensionToSlug } from "@/lib/devicon-map";
@@ -17,6 +17,8 @@ interface Node {
   path: string;
   type: "tree" | "blob";
   size?: number;
+  /** Parent path (empty string for top-level). */
+  parent: string;
   children: Map<string, Node>;
 }
 
@@ -25,6 +27,7 @@ function buildTree(entries: TreeEntry[]): Node {
     name: "",
     path: "",
     type: "tree",
+    parent: "",
     children: new Map(),
   };
   for (const e of entries) {
@@ -41,6 +44,7 @@ function buildTree(entries: TreeEntry[]): Node {
           path: parts.slice(0, i + 1).join("/"),
           type: isLast ? e.type : "tree",
           size: isLast ? e.size : undefined,
+          parent: parts.slice(0, i).join("/"),
           children: new Map(),
         };
         cur.children.set(segment, child);
@@ -49,6 +53,24 @@ function buildTree(entries: TreeEntry[]): Node {
     }
   }
   return root;
+}
+
+function sortNodes(a: Node, b: Node): number {
+  if (a.type !== b.type) return a.type === "tree" ? -1 : 1;
+  return a.name.localeCompare(b.name);
+}
+
+/** Walks the tree honoring `expanded`; returns a flat ordered list. */
+function flattenVisible(root: Node, expanded: Set<string>): Node[] {
+  const out: Node[] = [];
+  const visit = (n: Node) => {
+    out.push(n);
+    if (n.type === "tree" && expanded.has(n.path)) {
+      for (const c of [...n.children.values()].sort(sortNodes)) visit(c);
+    }
+  };
+  for (const top of [...root.children.values()].sort(sortNodes)) visit(top);
+  return out;
 }
 
 export function FileTree({ entries, className, defaultExpandTop = true }: Props) {
@@ -63,6 +85,31 @@ export function FileTree({ entries, className, defaultExpandTop = true }: Props)
     return s;
   });
 
+  const visible = useMemo(() => flattenVisible(root, expanded), [root, expanded]);
+
+  // Track focused path. Default to the first visible node when the tree
+  // first loads.
+  const [focusedPath, setFocusedPath] = useState<string | null>(
+    () => visible[0]?.path ?? null,
+  );
+  // If the entries change wholesale, snap focus back to the top.
+  useEffect(() => {
+    if (!focusedPath || !visible.some((n) => n.path === focusedPath)) {
+      setFocusedPath(visible[0]?.path ?? null);
+    }
+  }, [visible, focusedPath]);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+
+  // Auto-scroll the focused row into view whenever it changes.
+  useEffect(() => {
+    if (focusedPath) {
+      const el = rowRefs.current.get(focusedPath);
+      el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [focusedPath]);
+
   const toggle = (path: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -72,50 +119,121 @@ export function FileTree({ entries, className, defaultExpandTop = true }: Props)
     });
   };
 
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (visible.length === 0) return;
+    const idx = visible.findIndex((n) => n.path === focusedPath);
+    const cur = idx >= 0 ? visible[idx] : visible[0];
+
+    const move = (next: number) => {
+      const clamped = Math.max(0, Math.min(visible.length - 1, next));
+      setFocusedPath(visible[clamped].path);
+    };
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        move(idx + 1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        move(idx - 1);
+        break;
+      case "Home":
+        e.preventDefault();
+        move(0);
+        break;
+      case "End":
+        e.preventDefault();
+        move(visible.length - 1);
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        if (cur.type === "tree") {
+          if (!expanded.has(cur.path)) {
+            toggle(cur.path);
+          } else if (cur.children.size > 0) {
+            const firstChild = [...cur.children.values()].sort(sortNodes)[0];
+            setFocusedPath(firstChild.path);
+          }
+        }
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        if (cur.type === "tree" && expanded.has(cur.path)) {
+          toggle(cur.path);
+        } else if (cur.parent) {
+          setFocusedPath(cur.parent);
+        }
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (cur.type === "tree") toggle(cur.path);
+        break;
+    }
+  };
+
   return (
-    <ul className={cn("text-sm", className)}>
-      {[...root.children.values()]
-        .sort(sortNodes)
-        .map((c) => (
-          <NodeRow
-            key={c.path}
-            node={c}
-            depth={0}
-            expanded={expanded}
-            toggle={toggle}
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className={cn(
+        "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
+      aria-label="File tree"
+    >
+      <ul className="text-sm">
+        {visible.map((node) => (
+          <FlatRow
+            key={node.path}
+            node={node}
+            depth={node.path.split("/").length - 1}
+            isOpen={node.type === "tree" && expanded.has(node.path)}
+            focused={node.path === focusedPath}
+            onActivate={() => {
+              setFocusedPath(node.path);
+              if (node.type === "tree") toggle(node.path);
+            }}
+            onMouseEnter={() => setFocusedPath(node.path)}
+            registerRef={(el) => {
+              if (el) rowRefs.current.set(node.path, el);
+              else rowRefs.current.delete(node.path);
+            }}
           />
         ))}
-    </ul>
+      </ul>
+    </div>
   );
 }
 
-function sortNodes(a: Node, b: Node): number {
-  if (a.type !== b.type) return a.type === "tree" ? -1 : 1;
-  return a.name.localeCompare(b.name);
-}
-
-function NodeRow({
+function FlatRow({
   node,
   depth,
-  expanded,
-  toggle,
+  isOpen,
+  focused,
+  onActivate,
+  onMouseEnter,
+  registerRef,
 }: {
   node: Node;
   depth: number;
-  expanded: Set<string>;
-  toggle: (path: string) => void;
+  isOpen: boolean;
+  focused: boolean;
+  onActivate: () => void;
+  onMouseEnter: () => void;
+  registerRef: (el: HTMLLIElement | null) => void;
 }) {
-  const isOpen = node.type === "tree" && expanded.has(node.path);
   const indent = { paddingLeft: `${depth * 14 + 6}px` };
   const slug = node.type === "blob" ? extensionToSlug(node.name) : null;
-
   return (
-    <li>
+    <li ref={registerRef} onMouseEnter={onMouseEnter}>
       <button
         type="button"
-        onClick={() => node.type === "tree" && toggle(node.path)}
+        onClick={onActivate}
         className={cn(
           "flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-accent/60",
+          focused && "bg-primary/15 ring-1 ring-primary/40",
           node.type === "blob" && "cursor-default",
         )}
         style={indent}
@@ -144,21 +262,6 @@ function NodeRow({
           </span>
         )}
       </button>
-      {isOpen && node.children.size > 0 && (
-        <ul>
-          {[...node.children.values()]
-            .sort(sortNodes)
-            .map((c) => (
-              <NodeRow
-                key={c.path}
-                node={c}
-                depth={depth + 1}
-                expanded={expanded}
-                toggle={toggle}
-              />
-            ))}
-        </ul>
-      )}
     </li>
   );
 }

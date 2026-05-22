@@ -5,7 +5,13 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { THEMES, applyTheme, getStoredThemeId } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-export function ThemePicker() {
+interface ThemePickerProps {
+  /** Optional controlled open state — lets the global keybind toggle it. */
+  open?: boolean;
+  onOpenChange?: (v: boolean) => void;
+}
+
+export function ThemePicker({ open, onOpenChange }: ThemePickerProps = {}) {
   const [active, setActive] = useState<string>(getStoredThemeId());
 
   useEffect(() => {
@@ -19,7 +25,7 @@ export function ThemePicker() {
   const activeTheme = THEMES.find((t) => t.id === active) ?? THEMES[0];
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" aria-label="Pick theme">
           <Palette />

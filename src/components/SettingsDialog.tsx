@@ -1,0 +1,357 @@
+import { useEffect, useState } from "react";
+import { Keyboard, KeyRound, Loader2, RotateCcw, Settings, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { MarkdownPreview } from "@/components/MarkdownPreview";
+import {
+  ACTIONS,
+  combosFor,
+  format,
+  loadMap,
+  parse,
+  resetAll as resetKeybinds,
+  saveMap,
+  type KeyCombo,
+} from "@/lib/keybinds";
+import { getStoredToken, setStoredToken } from "@/lib/github";
+import { cn } from "@/lib/utils";
+
+// Inline-import the markdown so it ships in the bundle (same source of
+// truth as the in-repo docs/GUIDE.md). Vite's `?raw` suffix returns
+// the file contents as a string at build time.
+// eslint-disable-next-line import/no-unresolved
+import guideMarkdown from "../../docs/GUIDE.md?raw";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}
+
+export function SettingsDialog({ open, onOpenChange }: Props) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" /> Settings
+          </DialogTitle>
+          <DialogDescription>
+            FileHelm preferences, keybindings, and the full user guide.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Tabs defaultValue="general">
+          <TabsList>
+            <TabsTrigger value="general">
+              <Settings className="h-4 w-4" /> General
+            </TabsTrigger>
+            <TabsTrigger value="keybinds">
+              <Keyboard className="h-4 w-4" /> Keybinds
+            </TabsTrigger>
+            <TabsTrigger value="guide">
+              <KeyRound className="h-4 w-4" /> Guide
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="general">
+            <GeneralTab />
+          </TabsContent>
+          <TabsContent value="keybinds">
+            <KeybindsTab />
+          </TabsContent>
+          <TabsContent value="guide">
+            <div className="h-[60vh] overflow-hidden rounded-md border border-border bg-card">
+              <MarkdownPreview source={guideMarkdown} />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------- General tab ----------
+
+function GeneralTab() {
+  const [token, setToken] = useState(getStoredToken() ?? "");
+  const [saved, setSaved] = useState<"none" | "ok">("none");
+  const [resetting, setResetting] = useState(false);
+
+  const saveToken = () => {
+    setStoredToken(token.trim() || null);
+    setSaved("ok");
+    setTimeout(() => setSaved("none"), 1500);
+  };
+
+  const resetAll = () => {
+    setResetting(true);
+    try {
+      // Wipe every filehelm.* localStorage key, then reload.
+      const keys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("filehelm.")) keys.push(k);
+      }
+      keys.forEach((k) => localStorage.removeItem(k));
+      window.location.reload();
+    } catch {
+      setResetting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 py-2">
+      <Row
+        title="Close-to-tray"
+        description="When the X button is pressed, hide FileHelm to the system tray rather than quit. Coming as a runtime toggle in a follow-up — currently fixed on; use the tray Quit menu to actually exit."
+      >
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+          on
+        </span>
+      </Row>
+
+      <Separator />
+
+      <div>
+        <div className="mb-1.5 text-sm font-semibold">GitHub personal access token</div>
+        <div className="mb-2 text-xs text-muted-foreground">
+          Stored locally in <code>localStorage["filehelm.githubToken"]</code>.
+          Lifts the 60 req/hr public rate limit and unlocks private repos.
+          Create one at{" "}
+          <a
+            href="https://github.com/settings/tokens?type=beta"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-primary hover:underline"
+          >
+            github.com/settings/tokens
+          </a>{" "}
+          with the <code>public_repo</code> (or <code>repo</code>) scope.
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="ghp_…"
+            className="font-mono text-xs"
+          />
+          <Button onClick={saveToken} size="sm">
+            {saved === "ok" ? "Saved" : "Save"}
+          </Button>
+          {token && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setToken("");
+                setStoredToken(null);
+                setSaved("ok");
+                setTimeout(() => setSaved("none"), 1500);
+              }}
+              aria-label="Clear token"
+            >
+              <X />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Separator />
+
+      <div>
+        <div className="mb-1 text-sm font-semibold">Reset all settings</div>
+        <div className="mb-2 text-xs text-muted-foreground">
+          Clears theme, keybinds, GitHub token, and any other FileHelm
+          localStorage state. Your project DB at{" "}
+          <code>~/.filehelm/db.sqlite</code> is not touched.
+        </div>
+        <Button variant="destructive" size="sm" onClick={resetAll} disabled={resetting}>
+          {resetting ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+          Reset all settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-4">
+      <div className="flex-1">
+        <div className="text-sm font-semibold">{title}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{description}</div>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+// ---------- Keybinds tab ----------
+
+function KeybindsTab() {
+  const [map, setMap] = useState(loadMap);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [captured, setCaptured] = useState<KeyCombo | null>(null);
+
+  // Keep local state in sync if another part of the UI changes keybinds.
+  useEffect(() => {
+    const refresh = () => setMap(loadMap());
+    window.addEventListener("filehelm:keybinds-changed", refresh);
+    return () => window.removeEventListener("filehelm:keybinds-changed", refresh);
+  }, []);
+
+  const captureKey = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Ignore lone modifier keys
+    if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+    const combo: KeyCombo = {
+      ctrl: e.ctrlKey,
+      meta: e.metaKey,
+      alt: e.altKey,
+      shift: e.shiftKey,
+      key: e.key.length === 1 ? e.key.toLowerCase() : e.key,
+    };
+    setCaptured(combo);
+  };
+
+  const confirmEdit = (id: string) => {
+    if (!captured) return;
+    const next = { ...map, [id]: [captured] };
+    setMap(next);
+    saveMap(next);
+    setEditingId(null);
+    setCaptured(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setCaptured(null);
+  };
+
+  const reset = () => {
+    resetKeybinds();
+    setMap({});
+  };
+
+  // Group actions by their `group` field.
+  const grouped = ACTIONS.reduce<Record<string, typeof ACTIONS>>((acc, a) => {
+    (acc[a.group] ??= []).push(a);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          Click a chip → press a new key combo → Enter to confirm.
+        </div>
+        <Button variant="outline" size="sm" onClick={reset}>
+          <RotateCcw /> Reset to defaults
+        </Button>
+      </div>
+      <ScrollArea className="h-[50vh]">
+        <div className="space-y-4 pr-3">
+          {Object.entries(grouped).map(([group, actions]) => (
+            <section key={group}>
+              <div className="mb-1.5 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                {group}
+              </div>
+              <ul className="space-y-1">
+                {actions.map((a) => {
+                  const combos = combosFor(a.id, map);
+                  const editing = editingId === a.id;
+                  return (
+                    <li
+                      key={a.id}
+                      className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-1.5"
+                    >
+                      <div className="min-w-0 flex-1 text-sm">{a.label}</div>
+                      {editing ? (
+                        <div
+                          tabIndex={0}
+                          onKeyDown={captureKey}
+                          className={cn(
+                            "min-w-32 rounded-md border border-primary bg-primary/10 px-2 py-1 text-center text-xs",
+                            "outline-none ring-2 ring-primary/40",
+                          )}
+                          autoFocus
+                          ref={(el) => el?.focus()}
+                        >
+                          {captured ? (
+                            <span className="font-mono">{format(captured)}</span>
+                          ) : (
+                            <span className="text-muted-foreground">press keys…</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {combos.map((c, i) => (
+                            <kbd
+                              key={i}
+                              className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]"
+                            >
+                              {format(c)}
+                            </kbd>
+                          ))}
+                        </div>
+                      )}
+                      {editing ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => confirmEdit(a.id)}
+                            disabled={!captured}
+                          >
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingId(a.id);
+                            setCaptured(null);
+                          }}
+                        >
+                          Rebind
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+// Keep `parse` imported so we silence a TS unused-import warning when
+// future tweaks remove the only usage — small no-op reference.
+const _parseRef = parse;
+void _parseRef;
