@@ -286,3 +286,67 @@ struct CargoToml {
     #[serde(rename = "dev-dependencies", default)]
     dev_dependencies: Option<std::collections::BTreeMap<String, toml::Value>>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn write(dir: &std::path::Path, name: &str, content: &str) {
+        std::fs::write(dir.join(name), content).unwrap();
+    }
+
+    #[test]
+    fn detects_a_rust_tauri_project() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path();
+        write(p, "Cargo.toml", r#"
+[package]
+name = "x"
+version = "0.1.0"
+
+[dependencies]
+tauri = "2"
+axum = "0.7"
+"#);
+        let c = classify(p).unwrap();
+        assert!(c.languages.contains(&"rust".into()), "rust language not found in {:?}", c.languages);
+        assert!(c.frameworks.contains(&"tauri".into()), "tauri framework not found in {:?}", c.frameworks);
+        assert!(c.frameworks.contains(&"axum".into()));
+    }
+
+    #[test]
+    fn detects_a_next_typescript_project() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path();
+        write(p, "package.json", r#"{
+  "name": "x",
+  "dependencies": { "next": "14", "react": "18", "typescript": "5" },
+  "devDependencies": { "vite": "5" }
+}"#);
+        let c = classify(p).unwrap();
+        assert!(c.languages.contains(&"node".into()));
+        assert!(c.languages.contains(&"typescript".into()));
+        assert!(c.frameworks.contains(&"next".into()));
+        assert!(c.frameworks.contains(&"react".into()));
+        assert!(c.tools.contains(&"vite".into()));
+    }
+
+    #[test]
+    fn detects_a_python_django_project() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path();
+        write(p, "requirements.txt", "django==5.0\nrequests==2");
+        let c = classify(p).unwrap();
+        assert!(c.languages.contains(&"python".into()));
+        assert!(c.frameworks.contains(&"django".into()));
+    }
+
+    #[test]
+    fn empty_dir_classifies_to_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let c = classify(tmp.path()).unwrap();
+        assert!(c.languages.is_empty());
+        assert!(c.frameworks.is_empty());
+    }
+}

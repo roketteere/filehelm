@@ -124,6 +124,34 @@ pub fn compute(root: &Path) -> AppResult<ProjectStats> {
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn counts_lines_per_language_and_ignores_skip_dirs() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("main.rs"), "fn main() {\n    println!(\"hi\");\n}\n").unwrap();
+        std::fs::write(root.join("app.ts"), "export const x = 1;\nexport const y = 2;\n").unwrap();
+        std::fs::create_dir(root.join("node_modules")).unwrap();
+        std::fs::write(root.join("node_modules/a.js"), "// this should be skipped\n").unwrap();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        std::fs::write(root.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+
+        let s = compute(root).unwrap();
+        // 2 source files (main.rs + app.ts), node_modules/.git skipped.
+        assert_eq!(s.total_files, 2, "stats picked up skipped files: {:?}", s.by_language);
+        let rust = s.by_language.iter().find(|l| l.key == "rust").unwrap();
+        let ts = s.by_language.iter().find(|l| l.key == "typescript").unwrap();
+        assert_eq!(rust.files, 1);
+        assert_eq!(ts.files, 1);
+        assert!(rust.lines >= 3);
+        assert!(ts.lines >= 2);
+    }
+}
+
 fn classify_file(path: &Path) -> Option<(&'static str, &'static str)> {
     // Special filenames first.
     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {

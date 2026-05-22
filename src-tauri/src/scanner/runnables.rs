@@ -314,3 +314,44 @@ struct PyProject {
 struct PyProjectMeta {
     scripts: Option<std::collections::BTreeMap<String, String>>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn extracts_pnpm_scripts_from_package_json() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("pnpm-lock.yaml"), "lockfileVersion: 9.0\n").unwrap();
+        std::fs::write(
+            tmp.path().join("package.json"),
+            r#"{"scripts": {"dev": "vite", "build": "vite build", "test": "vitest"}}"#,
+        )
+        .unwrap();
+        let runs = extract(tmp.path()).unwrap();
+        let labels: Vec<_> = runs.iter().map(|r| r.label.clone()).collect();
+        assert!(labels.contains(&"pnpm dev".into()), "labels: {:?}", labels);
+        assert!(labels.contains(&"pnpm build".into()));
+        assert!(labels.contains(&"pnpm test".into()));
+        let kinds: std::collections::HashSet<_> = runs.iter().map(|r| r.kind).collect();
+        assert!(kinds.contains(&ActionKind::Dev));
+        assert!(kinds.contains(&ActionKind::Build));
+        assert!(kinds.contains(&ActionKind::Test));
+    }
+
+    #[test]
+    fn parses_makefile_targets_skipping_phony_and_var_assignments() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join("Makefile"),
+            "PORT = 5191\n.PHONY: all clean\nall:\n\techo all\nclean:\n\trm -rf dist\n",
+        )
+        .unwrap();
+        let runs = extract(tmp.path()).unwrap();
+        let labels: Vec<_> = runs.iter().map(|r| r.label.clone()).collect();
+        assert!(labels.contains(&"make all".into()), "labels: {:?}", labels);
+        assert!(labels.contains(&"make clean".into()));
+        assert!(!labels.iter().any(|l| l.contains("PORT")));
+    }
+}
