@@ -44,5 +44,12 @@
     "category": "DeveloperTool",
     "shortDescription": "Local project launcher + file commander",
     "longDescription": "FileHelm — auto-detects your dev projects' languages and run commands, launches them with one click. Includes a dual-pane file commander."
+  },
+  "plugins": {
+    "updater": {
+      "active": false,
+      "pubkey": "",
+      "endpoints": []
+    }
   }
 }

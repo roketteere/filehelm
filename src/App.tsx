@@ -13,6 +13,7 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { SortPicker } from "@/components/SortPicker";
 import { SearchDialog } from "@/components/SearchDialog";
 import { Splash } from "@/components/Splash";
+import { FileCommander } from "@/components/FileCommander";
 import { applyStoredTheme } from "@/lib/theme";
 import { onAction, useKeybinds } from "@/lib/keybinds";
 import { ipc } from "@/lib/ipc";
@@ -32,6 +33,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
@@ -180,6 +182,7 @@ export default function App() {
     offs.push(onAction("open-github", () => setGithubOpen(true)));
     offs.push(onAction("open-theme", () => setThemeOpen((v) => !v)));
     offs.push(onAction("open-search", () => setSearchOpen(true)));
+    offs.push(onAction("open-files", () => setFilesOpen(true)));
     offs.push(onAction("scan-all", () => scanAll()));
 
     offs.push(
@@ -225,6 +228,7 @@ export default function App() {
         setGithubOpen(false);
         setThemeOpen(false);
         setSearchOpen(false);
+        setFilesOpen(false);
       }),
     );
 
@@ -335,6 +339,12 @@ export default function App() {
         projects={projects}
         onPick={(p) => setSelectedId(p.id)}
         onDismiss={() => {}}
+      />
+
+      <FileCommander
+        open={filesOpen}
+        onOpenChange={setFilesOpen}
+        initialPath={selected?.abs_path ?? null}
       />
     </TooltipProvider>
   );

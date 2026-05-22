@@ -147,3 +147,11 @@ export interface SearchHit {
   text: string;
 }
 
+export interface DirEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified_iso: string | null;
+}
+

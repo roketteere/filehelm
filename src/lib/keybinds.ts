@@ -109,6 +109,13 @@ export const ACTIONS: ActionDef[] = [
     defaultCombos: [parse("Ctrl+Shift+F")],
     allowInInput: true,
   },
+  {
+    id: "open-files",
+    label: "Open file commander",
+    group: "Dialogs",
+    defaultCombos: [parse("Ctrl+Shift+E")],
+    allowInInput: true,
+  },
 ];
 
 // ---------- parsing / formatting ----------

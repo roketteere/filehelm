@@ -4,6 +4,7 @@ mod clone;
 mod commands;
 mod db;
 mod error;
+mod fs_ops;
 mod git;
 mod pty;
 mod runner;
@@ -45,6 +46,33 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    // Single hotkey wired here: toggle window visibility.
+                    // Frontend can register additional shortcuts via the
+                    // plugin's JS API later.
+                    use tauri::Manager;
+                    use tauri_plugin_global_shortcut::ShortcutState;
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    if let Some(win) = app.get_webview_window("main") {
+                        let visible = win.is_visible().unwrap_or(false);
+                        let minimized = win.is_minimized().unwrap_or(false);
+                        if visible && !minimized {
+                            let _ = win.hide();
+                        } else {
+                            let _ = win.unminimize();
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                    }
+                    let _ = shortcut;
+                })
+                .build(),
+        )
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
@@ -64,6 +92,15 @@ pub fn run() {
             // Build the system tray icon (Windows notification area).
             if let Err(e) = tray::build(&handle) {
                 tracing::warn!(error = ?e, "tray build failed");
+            }
+            // Register the default global hotkey Ctrl+Alt+Space →
+            // toggle main window visibility. Failures (e.g. shortcut
+            // already in use by another app) are non-fatal.
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                if let Err(e) = handle.global_shortcut().register("CmdOrCtrl+Alt+Space") {
+                    tracing::warn!(error = ?e, "failed to register global hotkey Ctrl+Alt+Space");
+                }
             }
             Ok(())
         })
@@ -130,6 +167,12 @@ pub fn run() {
             commands::pty_resize,
             commands::pty_kill,
             commands::run_action_embedded,
+            commands::fs_read_dir,
+            commands::fs_copy,
+            commands::fs_move,
+            commands::fs_mkdir,
+            commands::fs_delete,
+            commands::fs_home,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");

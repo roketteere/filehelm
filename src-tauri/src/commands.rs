@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::clone;
 use crate::error::{AppError, AppResult};
+use crate::fs_ops;
 use crate::git;
 use crate::pty;
 use crate::runner;
@@ -901,6 +902,46 @@ pub async fn set_project_sort_order(id: i64, sort_order: i64) -> AppResult<()> {
 }
 
 // ---------- Cross-project ripgrep search ----------
+
+// ---------- File commander (Phase 3) ----------
+
+#[tauri::command]
+pub async fn fs_read_dir(path: String) -> AppResult<Vec<fs_ops::DirEntry>> {
+    let p = if path.is_empty() {
+        fs_ops::home_dir()?
+    } else {
+        std::path::PathBuf::from(path)
+    };
+    fs_ops::read_dir(&p)
+}
+
+#[tauri::command]
+pub async fn fs_copy(src: String, dest_dir: String) -> AppResult<String> {
+    let r = fs_ops::copy_path(std::path::Path::new(&src), std::path::Path::new(&dest_dir))?;
+    Ok(r.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn fs_move(src: String, dest_dir: String) -> AppResult<String> {
+    let r = fs_ops::move_path(std::path::Path::new(&src), std::path::Path::new(&dest_dir))?;
+    Ok(r.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn fs_mkdir(parent: String, name: String) -> AppResult<String> {
+    let r = fs_ops::mkdir(std::path::Path::new(&parent), &name)?;
+    Ok(r.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn fs_delete(path: String) -> AppResult<()> {
+    fs_ops::delete(std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub async fn fs_home() -> AppResult<String> {
+    Ok(fs_ops::home_dir()?.to_string_lossy().into_owned())
+}
 
 #[tauri::command]
 pub async fn search_projects(

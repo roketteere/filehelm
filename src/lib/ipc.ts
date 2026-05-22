@@ -5,6 +5,7 @@ import type {
   BranchInfo,
   CloneResult,
   DetectedUrl,
+  DirEntry,
   GitCommit,
   GitInfo,
   GitOutcome,
@@ -142,4 +143,15 @@ export const ipc = {
     invoke<void>("pty_kill", { sessionId }),
   runActionEmbedded: (actionId: number, sessionId: string, rows: number, cols: number) =>
     invoke<void>("run_action_embedded", { actionId, sessionId, rows, cols }),
+
+  // File commander (Phase 3)
+  fsReadDir: (path: string) => invoke<DirEntry[]>("fs_read_dir", { path }),
+  fsCopy: (src: string, destDir: string) =>
+    invoke<string>("fs_copy", { src, destDir }),
+  fsMove: (src: string, destDir: string) =>
+    invoke<string>("fs_move", { src, destDir }),
+  fsMkdir: (parent: string, name: string) =>
+    invoke<string>("fs_mkdir", { parent, name }),
+  fsDelete: (path: string) => invoke<void>("fs_delete", { path }),
+  fsHome: () => invoke<string>("fs_home"),
 };
