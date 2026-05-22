@@ -7,6 +7,7 @@ mod error;
 mod git;
 mod runner;
 mod scanner;
+mod search;
 mod stats;
 mod tray;
 
@@ -101,6 +102,9 @@ pub fn run() {
             commands::project_git_pull,
             commands::project_git_fetch,
             commands::project_git_status,
+            commands::project_git_branches,
+            commands::project_git_checkout,
+            commands::project_git_diff,
             commands::set_project_pinned,
             commands::list_run_history,
             commands::add_root_from_path,
@@ -118,6 +122,8 @@ pub fn run() {
             commands::run_action_chain,
             commands::upsert_action,
             commands::delete_action,
+            commands::set_project_sort_order,
+            commands::search_projects,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");

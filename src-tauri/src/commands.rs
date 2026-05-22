@@ -11,6 +11,7 @@ use crate::error::{AppError, AppResult};
 use crate::git;
 use crate::runner;
 use crate::scanner;
+use crate::search;
 use crate::state;
 use crate::stats;
 
@@ -425,6 +426,24 @@ pub async fn project_git_status(id: i64) -> AppResult<String> {
     git::status_text(&p)
 }
 
+#[tauri::command]
+pub async fn project_git_branches(id: i64) -> AppResult<Vec<git::BranchInfo>> {
+    let p = project_path(id).await?;
+    git::branches(&p)
+}
+
+#[tauri::command]
+pub async fn project_git_checkout(id: i64, branch: String) -> AppResult<git::GitOutcome> {
+    let p = project_path(id).await?;
+    git::checkout(&p, &branch)
+}
+
+#[tauri::command]
+pub async fn project_git_diff(id: i64, staged: bool) -> AppResult<String> {
+    let p = project_path(id).await?;
+    git::diff(&p, staged)
+}
+
 // ---------- Pin / unpin (Phase 2.1) ----------
 
 #[tauri::command]
@@ -802,6 +821,35 @@ pub async fn delete_action(id: i64) -> AppResult<()> {
     Ok(())
 }
 
+#[tauri::command]
+pub async fn set_project_sort_order(id: i64, sort_order: i64) -> AppResult<()> {
+    sqlx::query("UPDATE projects SET sort_order = ? WHERE id = ?")
+        .bind(sort_order)
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
+// ---------- Cross-project ripgrep search ----------
+
+#[tauri::command]
+pub async fn search_projects(
+    query: String,
+    max_hits: u32,
+) -> AppResult<Vec<search::SearchHit>> {
+    let rows: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, name, abs_path FROM projects ORDER BY pinned DESC, name ASC",
+    )
+    .fetch_all(&state().db)
+    .await?;
+    let max = if max_hits == 0 { 200 } else { max_hits };
+    let q = query.clone();
+    tauri::async_runtime::spawn_blocking(move || search::search(rows, &q, max))
+        .await
+        .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?
+}
+
 // ---------- GitHub clone & import ----------
 
 #[derive(Deserialize)]
@@ -817,9 +865,12 @@ pub struct CloneResult {
 }
 
 #[tauri::command]
-pub async fn clone_repo(args: CloneRepoArgs) -> AppResult<CloneResult> {
+pub async fn clone_repo(
+    args: CloneRepoArgs,
+    app: tauri::AppHandle,
+) -> AppResult<CloneResult> {
     let dest = PathBuf::from(&args.dest);
-    let outcome = clone::clone_to(&args.url, &dest).await?;
+    let outcome = clone::clone_to_with_progress(Some(&app), &args.url, &dest).await?;
     let dest_str = outcome.dest.to_string_lossy().to_string();
 
     let parent = outcome

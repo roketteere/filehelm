@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   Download,
   ExternalLink,
@@ -67,6 +68,7 @@ export function GithubDialog({ open, onOpenChange, defaultParent, onCloned }: Pr
   const [dest, setDest] = useState("");
   const [cloning, setCloning] = useState(false);
   const [cloneLog, setCloneLog] = useState<string[]>([]);
+  const logBoxRef = useRef<HTMLPreElement | null>(null);
 
   // Reset whenever the dialog re-opens.
   useEffect(() => {
@@ -141,6 +143,34 @@ export function GithubDialog({ open, onOpenChange, defaultParent, onCloned }: Pr
     }
   };
 
+  // Subscribe to the live clone-progress event for as long as the
+  // dialog is open. Each line is appended to cloneLog as it arrives.
+  useEffect(() => {
+    if (!open) return;
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      try {
+        const webview = getCurrentWebview();
+        unlisten = await webview.listen<string>(
+          "filehelm:clone-progress",
+          (event) => {
+            setCloneLog((prev) => [...prev, event.payload]);
+            // Auto-scroll the log box.
+            requestAnimationFrame(() => {
+              const box = logBoxRef.current;
+              if (box) box.scrollTop = box.scrollHeight;
+            });
+          },
+        );
+      } catch {
+        // not in Tauri runtime
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [open]);
+
   const clone = async () => {
     if (!repo || !dest) return;
     setCloning(true);
@@ -148,6 +178,9 @@ export function GithubDialog({ open, onOpenChange, defaultParent, onCloned }: Pr
     setCloneLog([]);
     try {
       const result = await ipc.cloneRepo(repo.html_url, dest);
+      // Result.log is the final accumulated stderr — already shown
+      // line-by-line through the live event, but the backend's return
+      // value is canonical so use it for the final state.
       setCloneLog(result.log);
       await onCloned(result.project);
       onOpenChange(false);
@@ -341,12 +374,15 @@ export function GithubDialog({ open, onOpenChange, defaultParent, onCloned }: Pr
               </div>
             </div>
 
-            {cloneLog.length > 0 && (
-              <ScrollArea className="max-h-32 rounded-md border border-border bg-card p-2">
-                <pre className="whitespace-pre-wrap break-all text-[10px] leading-snug text-muted-foreground">
-                  {cloneLog.join("\n")}
+            {(cloneLog.length > 0 || cloning) && (
+              <div className="max-h-40 overflow-auto rounded-md border border-border bg-black/40 p-2">
+                <pre
+                  ref={logBoxRef}
+                  className="whitespace-pre-wrap break-all font-mono text-[10px] leading-snug text-emerald-200/90"
+                >
+                  {cloneLog.length === 0 ? "starting clone…" : cloneLog.join("\n")}
                 </pre>
-              </ScrollArea>
+              </div>
             )}
           </div>
         )}

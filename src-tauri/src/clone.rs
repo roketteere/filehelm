@@ -1,12 +1,13 @@
 //! `git clone` shell-out for the GitHub import flow.
 //!
-//! Phase 1.7 ships the simplest viable version: invoke `git clone --progress`,
-//! capture stderr (where git writes progress), return the captured log on
-//! success. No live streaming back to the UI yet — that's tracked as a
-//! backlog item.
+//! Invokes `git clone --progress` and streams every stderr line back to
+//! the frontend via the `filehelm:clone-progress` Tauri event so the
+//! Clone dialog can render xterm-style live output. The full log is
+//! also returned on completion for the "git output" details panel.
 
 use std::path::{Path, PathBuf};
 
+use tauri::{AppHandle, Emitter, Runtime};
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 
@@ -17,7 +18,11 @@ pub struct CloneOutcome {
     pub log: Vec<String>,
 }
 
-pub async fn clone_to(url: &str, dest: &Path) -> AppResult<CloneOutcome> {
+pub async fn clone_to_with_progress<R: Runtime>(
+    app: Option<&AppHandle<R>>,
+    url: &str,
+    dest: &Path,
+) -> AppResult<CloneOutcome> {
     if url.trim().is_empty() {
         return Err(AppError::Invalid("empty URL".into()));
     }
@@ -71,6 +76,11 @@ pub async fn clone_to(url: &str, dest: &Path) -> AppResult<CloneOutcome> {
         let reader = tokio::io::BufReader::new(stderr);
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
+            // Live-stream every progress line to the frontend so the
+            // Clone dialog can render xterm-style output.
+            if let Some(handle) = app {
+                let _ = handle.emit("filehelm:clone-progress", &line);
+            }
             log.push(line);
         }
     }

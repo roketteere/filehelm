@@ -86,6 +86,12 @@ export interface GitOutcome {
   log: string[];
 }
 
+export interface BranchInfo {
+  name: string;
+  current: boolean;
+  remote: boolean;
+}
+
 // Run history
 export interface RunHistoryRow {
   id: number;
@@ -131,5 +137,13 @@ export interface ActionChainRow {
   steps_json: string;
   kind: string;
   sort_order: number;
+}
+
+export interface SearchHit {
+  project_id: number;
+  project_name: string;
+  path: string;
+  line: number;
+  text: string;
 }
 

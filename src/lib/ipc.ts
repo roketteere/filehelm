@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ActionChainRow,
   BackupResult,
+  BranchInfo,
   CloneResult,
   DetectedUrl,
   GitCommit,
@@ -13,6 +14,7 @@ import type {
   Root,
   RunHistoryRow,
   ScanReport,
+  SearchHit,
 } from "@/types";
 
 export const ipc = {
@@ -57,6 +59,12 @@ export const ipc = {
   projectGitPull: (id: number) => invoke<GitOutcome>("project_git_pull", { id }),
   projectGitFetch: (id: number) => invoke<GitOutcome>("project_git_fetch", { id }),
   projectGitStatus: (id: number) => invoke<string>("project_git_status", { id }),
+  projectGitBranches: (id: number) =>
+    invoke<BranchInfo[]>("project_git_branches", { id }),
+  projectGitCheckout: (id: number, branch: string) =>
+    invoke<GitOutcome>("project_git_checkout", { id, branch }),
+  projectGitDiff: (id: number, staged = false) =>
+    invoke<string>("project_git_diff", { id, staged }),
 
   // Pin / unpin
   setProjectPinned: (id: number, pinned: boolean) =>
@@ -111,4 +119,10 @@ export const ipc = {
     invoke<void>("delete_action_chain", { id }),
   runActionChain: (id: number) =>
     invoke<void>("run_action_chain", { id }),
+
+  setProjectSortOrder: (id: number, sortOrder: number) =>
+    invoke<void>("set_project_sort_order", { id, sortOrder }),
+
+  searchProjects: (query: string, maxHits = 200) =>
+    invoke<SearchHit[]>("search_projects", { query, maxHits }),
 };

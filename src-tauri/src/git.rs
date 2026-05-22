@@ -115,6 +115,60 @@ pub fn status_text(repo: &Path) -> AppResult<String> {
     run_str(repo, &["status", "--short", "--branch"])
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct BranchInfo {
+    pub name: String,
+    pub current: bool,
+    pub remote: bool,
+}
+
+pub fn branches(repo: &Path) -> AppResult<Vec<BranchInfo>> {
+    if !repo.join(".git").exists() {
+        return Ok(vec![]);
+    }
+    let out = run_str(
+        repo,
+        &["branch", "--all", "--format=%(refname:short)\t%(HEAD)"],
+    )
+    .unwrap_or_default();
+    let mut branches = Vec::new();
+    for line in out.lines() {
+        let mut parts = line.split('\t');
+        let name = parts.next().unwrap_or("").trim().to_string();
+        let head = parts.next().unwrap_or("").trim();
+        if name.is_empty() {
+            continue;
+        }
+        let remote = name.starts_with("origin/") || name.contains("/HEAD");
+        if name.ends_with("/HEAD") {
+            continue;
+        }
+        branches.push(BranchInfo {
+            name,
+            current: head == "*",
+            remote,
+        });
+    }
+    Ok(branches)
+}
+
+pub fn checkout(repo: &Path, branch: &str) -> AppResult<GitOutcome> {
+    // If the branch contains a slash and isn't local, drop "origin/" prefix.
+    let local = branch.strip_prefix("origin/").unwrap_or(branch).to_string();
+    run_with_log(repo, &["checkout", &local])
+}
+
+pub fn diff(repo: &Path, staged: bool) -> AppResult<String> {
+    if !repo.join(".git").exists() {
+        return Ok(String::new());
+    }
+    let mut args: Vec<&str> = vec!["--no-pager", "diff", "--no-color"];
+    if staged {
+        args.push("--staged");
+    }
+    run_str(repo, &args).or_else(|_| Ok(String::new()))
+}
+
 // ---- internals ----
 
 fn run_str(repo: &Path, args: &[&str]) -> AppResult<String> {

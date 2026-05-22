@@ -102,6 +102,13 @@ export const ACTIONS: ActionDef[] = [
     defaultCombos: [parse("Ctrl+Shift+G")],
     allowInInput: true,
   },
+  {
+    id: "open-search",
+    label: "Open cross-project search",
+    group: "Dialogs",
+    defaultCombos: [parse("Ctrl+Shift+F")],
+    allowInInput: true,
+  },
 ];
 
 // ---------- parsing / formatting ----------
