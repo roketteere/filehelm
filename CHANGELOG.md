@@ -11,7 +11,55 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 
 (nothing yet)
 
-## [0.2.3] — 2026-05-22
+## [0.2.4] — 2026-05-22
+
+First v0.2.x release that *actually works end-to-end on a fresh
+install.* v0.2.0 through v0.2.3 were yanked from the GitHub
+Releases page after surfacing bugs that prevented add-root + scan.
+The fixes for all of them roll up here.
+
+### Fixed
+
+- **Silent Windows child processes.** Every internal child spawn
+  (`git status` per project for the GitBadge, `rg` cross-project
+  search, `git clone --progress`, `cmd /C code`, `explorer.exe`,
+  `taskkill`) now uses `CREATE_NO_WINDOW`. No more strobing wall
+  of cmd flashes when scanning a root with 30 projects. Visible
+  spawns by design (Windows Terminal action launches,
+  "Open terminal here") still pop a terminal — that's the point.
+  New `src-tauri/src/proc.rs` codifies the silent vs visible
+  convention.
+- **README-scan crash on UTF-8 boundary.** `trim_to_label` was
+  slicing strings at byte index 60 without checking codepoint
+  boundaries, which panicked on any README fenced-block command
+  longer than 60 bytes containing an em-dash / smart quote /
+  any non-ASCII character. In release builds that aborted the
+  process the instant scan touched that README ("opens and closes
+  after I add and scan the root folder"); in dev builds the
+  panic unwound across the tokio runtime and deadlocked ("scan
+  all stays spinning forever"). Now walks `char_indices()` to a
+  safe boundary. Regression-tested.
+- **Migration-drift recovery's own crash.** The v0.2.2 fix for
+  the migration-checksum panic introduced its own bug: it called
+  `drop(pool)` before `std::fs::rename`-ing the DB, but sqlx pool
+  drop is asynchronous. On Windows the rename hit a sharing
+  violation because the SQLite file handles were still open
+  ("opens then closes after install"). Now uses
+  `pool.close().await` which drives every connection's close
+  future to completion before the rename.
+
+### Added (diagnostic infrastructure)
+
+- **app.log** at `~/.filehelm/app.log` — truncating on each
+  launch — captures every `tracing` line at info level or above.
+  Critical for release builds on Windows where stdout is
+  detached from the parent console.
+- **Granular setup-phase tracing** in `db::init` + the Tauri
+  setup hook. Every step (data-dir resolved, create_dir_all ok,
+  pool connected, migrations applied, …) is logged so the last
+  line before any panic identifies the failing step.
+
+## [0.2.3] — 2026-05-22 (unreleased — bugfix vehicle for v0.2.4)
 
 ### Added
 
@@ -205,7 +253,8 @@ Highlights:
 - OS-global hotkey + Tauri auto-updater scaffold
 - Norton-style dual-pane file commander (MVP) + toolbar upgrades
 
-[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.3...HEAD
+[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.4...HEAD
+[0.2.4]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.4
 [0.2.3]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.3
 [0.2.2]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.2
 [0.2.1]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.1

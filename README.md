@@ -268,19 +268,24 @@ Releases are cut by a GitHub Actions workflow
 
 ### Run the prebuilt installer (recommended)
 
-**Current release: [v0.2.0](https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.0)** — first
-public, multi-platform build.
+**Current release: [v0.2.4](https://github.com/roketteere/filehelm/releases/latest)** — first
+stable end-to-end release (v0.2.0–v0.2.3 were withdrawn after
+bugs surfaced on fresh installs; v0.2.4 rolls up the fixes).
 
 | Platform | Asset(s) |
 |---|---|
-| **Windows 10/11** | `FileHelm_0.2.0_x64_en-US.msi` (system-wide) or `FileHelm_0.2.0_x64-setup.exe` (NSIS, user) |
-| **Linux** | `FileHelm_0.2.0_amd64.deb` (Debian/Ubuntu) · `FileHelm-0.2.0-1.x86_64.rpm` (Fedora/RHEL) · `FileHelm_0.2.0_amd64.AppImage` (portable) |
-| **macOS Apple Silicon** | `FileHelm_0.2.0_aarch64.dmg` · `FileHelm_aarch64.app.tar.gz` |
-| **macOS Intel** | Pending — the macos-13 GitHub Actions runner is slow allocating today; the asset publishes to the same release page once the matrix job completes. |
+| **Windows 10/11** | `FileHelm_0.2.4_x64_en-US.msi` (system-wide) or `FileHelm_0.2.4_x64-setup.exe` (NSIS, user) |
+| **Linux** | `FileHelm_0.2.4_amd64.deb` (Debian/Ubuntu) · `FileHelm-0.2.4-1.x86_64.rpm` (Fedora/RHEL) · `FileHelm_0.2.4_amd64.AppImage` (portable) |
+| **macOS Apple Silicon** | `FileHelm_0.2.4_aarch64.dmg` · `FileHelm_aarch64.app.tar.gz` |
+| **macOS Intel** | Pending whenever the macos-13 GitHub Actions runner allocates; the asset publishes to the same release page once the matrix job completes. |
 
-> The in-app auto-updater starts pointing here as soon as the
-> 4th matrix job (macOS Intel) finishes and the canonical
-> `latest.json` lands on the release.
+> The in-app auto-updater starts pointing here once the macOS
+> Intel job finishes and the canonical `latest.json` lands on the
+> release.
+
+If something goes wrong on startup, `~/.filehelm/app.log`
+(truncated each launch) and `~/.filehelm/last-panic.log` (rolling
+append) capture the exact failure point — useful for filing a bug.
 
 Maintainers cut new releases by pushing a `filehelm-vX.Y.Z` tag —
 the `.github/workflows/release.yml` matrix workflow does the rest.
