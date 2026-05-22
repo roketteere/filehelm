@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import {
   Code2,
   FolderOpen,
+  Pin,
+  PinOff,
   Play,
   RefreshCcw,
   Terminal,
@@ -28,9 +30,10 @@ import type { Project, ProjectAction } from "@/types";
 interface Props {
   project: Project;
   onRescanned: (p: Project) => void;
+  onPinChanged?: () => void;
 }
 
-export function ProjectDetail({ project, onRescanned }: Props) {
+export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
   const [actions, setActions] = useState<ProjectAction[]>([]);
   const [readme, setReadme] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -164,6 +167,26 @@ export function ProjectDetail({ project, onRescanned }: Props) {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Reveal in Explorer</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={project.pinned ? "default" : "outline"}
+                size="icon"
+                onClick={async () => {
+                  try {
+                    await ipc.setProjectPinned(project.id, !project.pinned);
+                    onPinChanged?.();
+                  } catch (e) {
+                    setError(String(e));
+                  }
+                }}
+                aria-label={project.pinned ? "Unpin project" : "Pin project"}
+              >
+                {project.pinned ? <PinOff /> : <Pin />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{project.pinned ? "Unpin" : "Pin"}</TooltipContent>
           </Tooltip>
           <Separator orientation="vertical" className="mx-1 h-7" />
           <Button variant="ghost" size="sm" onClick={rescan} disabled={loading}>

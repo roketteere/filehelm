@@ -10,6 +10,7 @@ mod scanner;
 mod tray;
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use tauri::{Emitter, WindowEvent};
 use tracing_subscriber::EnvFilter;
@@ -18,6 +19,11 @@ use tracing_subscriber::EnvFilter;
 pub struct AppState {
     pub db: sqlx::SqlitePool,
     pub data_dir: PathBuf,
+    /// When true, the X button hides the window to the tray instead of
+    /// quitting. Mirrored from the frontend's
+    /// localStorage["filehelm.closeToTray"] via the
+    /// `set_close_to_tray` Tauri command at boot.
+    pub close_to_tray: AtomicBool,
 }
 
 static STATE: OnceLock<AppState> = OnceLock::new();
@@ -43,7 +49,11 @@ pub fn run() {
                 std::fs::create_dir_all(&data_dir)?;
                 let db = db::init(&data_dir).await?;
                 STATE
-                    .set(AppState { db, data_dir })
+                    .set(AppState {
+                        db,
+                        data_dir,
+                        close_to_tray: AtomicBool::new(true),
+                    })
                     .map_err(|_| anyhow::anyhow!("state already initialized"))?;
                 tracing::info!("filehelm initialized");
                 Ok::<_, anyhow::Error>(())
@@ -55,10 +65,15 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Intercept the X button: hide to tray rather than exit.
-            // (Quit is reachable from the tray menu.)
+            // Intercept the X button: hide to tray rather than exit,
+            // unless the user opted out via Settings.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+                if window.label() == "main"
+                    && STATE
+                        .get()
+                        .map(|s| s.close_to_tray.load(Ordering::Relaxed))
+                        .unwrap_or(true)
+                {
                     api.prevent_close();
                     let _ = window.hide();
                     let _ = window.emit("filehelm:hidden-to-tray", ());
@@ -88,6 +103,8 @@ pub fn run() {
             commands::set_project_pinned,
             commands::list_run_history,
             commands::add_root_from_path,
+            commands::set_close_to_tray,
+            commands::get_close_to_tray,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");

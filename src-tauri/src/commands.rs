@@ -464,6 +464,23 @@ pub async fn add_root_from_path(path: String) -> AppResult<RootRow> {
     add_root(AddRootArgs { path, label: None }).await
 }
 
+// ---------- Close-to-tray runtime toggle ----------
+
+#[tauri::command]
+pub async fn set_close_to_tray(enabled: bool) -> AppResult<()> {
+    state()
+        .close_to_tray
+        .store(enabled, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_close_to_tray() -> AppResult<bool> {
+    Ok(state()
+        .close_to_tray
+        .load(std::sync::atomic::Ordering::Relaxed))
+}
+
 // ---------- GitHub clone & import ----------
 
 #[derive(Deserialize)]

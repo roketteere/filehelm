@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Keyboard, KeyRound, Loader2, RotateCcw, Settings, X } from "lucide-react";
+import { Clock, Keyboard, KeyRound, Loader2, RotateCcw, Settings, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
+import { RunHistoryView } from "@/components/RunHistoryView";
 import {
   ACTIONS,
   combosFor,
@@ -24,6 +25,8 @@ import {
   type KeyCombo,
 } from "@/lib/keybinds";
 import { getStoredToken, setStoredToken } from "@/lib/github";
+import { ipc } from "@/lib/ipc";
+import { prefs } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
 
 // Inline-import the markdown so it ships in the bundle (same source of
@@ -58,6 +61,9 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
             <TabsTrigger value="keybinds">
               <Keyboard className="h-4 w-4" /> Keybinds
             </TabsTrigger>
+            <TabsTrigger value="history">
+              <Clock className="h-4 w-4" /> History
+            </TabsTrigger>
             <TabsTrigger value="guide">
               <KeyRound className="h-4 w-4" /> Guide
             </TabsTrigger>
@@ -67,6 +73,9 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
           </TabsContent>
           <TabsContent value="keybinds">
             <KeybindsTab />
+          </TabsContent>
+          <TabsContent value="history">
+            <RunHistoryView />
           </TabsContent>
           <TabsContent value="guide">
             <div className="h-[60vh] overflow-hidden rounded-md border border-border bg-card">
@@ -85,6 +94,18 @@ function GeneralTab() {
   const [token, setToken] = useState(getStoredToken() ?? "");
   const [saved, setSaved] = useState<"none" | "ok">("none");
   const [resetting, setResetting] = useState(false);
+  const [closeToTray, setCloseToTrayState] = useState(prefs.closeToTray());
+
+  const toggleCloseToTray = async () => {
+    const next = !closeToTray;
+    setCloseToTrayState(next);
+    prefs.setCloseToTray(next);
+    try {
+      await ipc.setCloseToTray(next);
+    } catch {
+      // backend will pick up the next time set_close_to_tray fires on boot
+    }
+  };
 
   const saveToken = () => {
     setStoredToken(token.trim() || null);
@@ -112,11 +133,23 @@ function GeneralTab() {
     <div className="space-y-5 py-2">
       <Row
         title="Close-to-tray"
-        description="When the X button is pressed, hide FileHelm to the system tray rather than quit. Coming as a runtime toggle in a follow-up — currently fixed on; use the tray Quit menu to actually exit."
+        description="When the X button is pressed, hide FileHelm to the system tray rather than quit. Use the tray's Quit menu to actually exit when this is on."
       >
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-          on
-        </span>
+        <button
+          onClick={toggleCloseToTray}
+          className={cn(
+            "relative h-5 w-9 rounded-full transition-colors",
+            closeToTray ? "bg-primary" : "bg-muted",
+          )}
+          aria-label={closeToTray ? "Disable close-to-tray" : "Enable close-to-tray"}
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-all",
+              closeToTray ? "left-[1.125rem]" : "left-0.5",
+            )}
+          />
+        </button>
       </Row>
 
       <Separator />

@@ -65,4 +65,9 @@ export const ipc = {
   // Add root from path (drag-drop)
   addRootFromPath: (path: string) =>
     invoke<Root>("add_root_from_path", { path }),
+
+  // Close-to-tray runtime toggle
+  setCloseToTray: (enabled: boolean) =>
+    invoke<void>("set_close_to_tray", { enabled }),
+  getCloseToTray: () => invoke<boolean>("get_close_to_tray"),
 };

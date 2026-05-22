@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, FolderTree, Pin, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LanguageIcon } from "@/components/LanguageIcon";
 import { GitBadge } from "@/components/GitBadge";
 import { splitWindowsPath } from "@/lib/path";
+import { prefs, type SortMode } from "@/lib/prefs";
 import { cn, formatRelative } from "@/lib/utils";
 import type { Project, Root } from "@/types";
 
@@ -18,18 +19,26 @@ interface Props {
 export function ProjectList({ roots, projects, selectedId, onSelect }: Props) {
   const [query, setQuery] = useState("");
   const [manualCollapsed, setManualCollapsed] = useState<Record<number, boolean>>({});
+  const [sortMode, setSortMode] = useState<SortMode>(prefs.sortMode());
+  useEffect(() => {
+    const refresh = () => setSortMode(prefs.sortMode());
+    window.addEventListener("filehelm:sortmode-changed", refresh);
+    return () => window.removeEventListener("filehelm:sortmode-changed", refresh);
+  }, []);
 
   // Filter projects by the query (cross-root). Empty query = show everything.
   const matches = useMemo(() => {
-    if (!query.trim()) return projects;
-    const q = query.toLowerCase();
-    return projects.filter((p) => {
-      if (p.name.toLowerCase().includes(q)) return true;
-      if (p.abs_path.toLowerCase().includes(q)) return true;
-      if (p.badges.some((b) => b.value.toLowerCase().includes(q))) return true;
-      return false;
-    });
-  }, [projects, query]);
+    const filtered = !query.trim()
+      ? projects.slice()
+      : projects.filter((p) => {
+          const q = query.toLowerCase();
+          if (p.name.toLowerCase().includes(q)) return true;
+          if (p.abs_path.toLowerCase().includes(q)) return true;
+          if (p.badges.some((b) => b.value.toLowerCase().includes(q))) return true;
+          return false;
+        });
+    return sortProjects(filtered, sortMode);
+  }, [projects, query, sortMode]);
 
   // Group filtered projects under their root_id.
   const grouped = useMemo(() => {
@@ -223,6 +232,42 @@ function RootHeader({
 }
 
 // ---- single project row ---------------------------------------------------
+
+function sortProjects(projects: Project[], mode: SortMode): Project[] {
+  const arr = projects.slice();
+  switch (mode) {
+    case "alpha":
+      arr.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+      break;
+    case "language":
+      arr.sort((a, b) => {
+        const al = a.primary_language ?? "zzz";
+        const bl = b.primary_language ?? "zzz";
+        if (al !== bl) return al.localeCompare(bl);
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+      break;
+    case "modified":
+      arr.sort((a, b) => {
+        const at = a.last_scanned_at;
+        const bt = b.last_scanned_at;
+        return bt.localeCompare(at);
+      });
+      break;
+    case "default":
+    default:
+      // Pinned first, then last-opened DESC, then name ASC.
+      arr.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        const ao = a.last_opened_at ?? "";
+        const bo = b.last_opened_at ?? "";
+        if (ao !== bo) return bo.localeCompare(ao);
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+      break;
+  }
+  return arr;
+}
 
 function ProjectRow({
   project,

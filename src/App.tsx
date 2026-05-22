@@ -10,9 +10,12 @@ import { GithubDialog } from "@/components/GithubDialog";
 import { ThemePicker } from "@/components/ThemePicker";
 import { TitleBar } from "@/components/TitleBar";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { SortPicker } from "@/components/SortPicker";
 import { applyStoredTheme } from "@/lib/theme";
 import { onAction, useKeybinds } from "@/lib/keybinds";
 import { ipc } from "@/lib/ipc";
+import { prefs } from "@/lib/prefs";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Project, Root } from "@/types";
 
 // Apply persisted theme before React mounts so the first paint matches.
@@ -56,18 +59,78 @@ export default function App() {
     });
   }, []);
 
+  const [hideHint, setHideHint] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         await refreshRoots();
         await refreshProjects();
+        // Sync the persisted close-to-tray preference into the Rust state
+        // so the next CloseRequested honors it.
+        try {
+          await ipc.setCloseToTray(prefs.closeToTray());
+        } catch {
+          // backend not yet ready / older build — non-fatal
+        }
       } catch (e) {
         if (!cancelled) setBootError(String(e));
       }
     })();
     return () => {
       cancelled = true;
+    };
+  }, [refreshRoots, refreshProjects]);
+
+  // First-time close-to-tray hint. Fires once when the Rust side hides
+  // the window — the listener stays attached but won't trigger a hint
+  // after `hideHintShown` is set.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      try {
+        const webview = getCurrentWebview();
+        unlisten = await webview.listen("filehelm:hidden-to-tray", () => {
+          if (!prefs.hideHintShown()) {
+            setHideHint(true);
+            prefs.markHideHintShown();
+          }
+        });
+      } catch {
+        // event API unavailable in non-Tauri context (e.g. plain `vite`)
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // Drag-drop a folder onto the window → add it as a root.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      try {
+        const webview = getCurrentWebview();
+        unlisten = await webview.onDragDropEvent(async (event) => {
+          if (event.payload.type !== "drop") return;
+          const paths = (event.payload as { paths: string[] }).paths;
+          for (const p of paths) {
+            try {
+              await ipc.addRootFromPath(p);
+            } catch (e) {
+              setBootError(String(e));
+            }
+          }
+          await refreshRoots();
+          await refreshProjects();
+        });
+      } catch {
+        // not in Tauri
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
     };
   }, [refreshRoots, refreshProjects]);
 
@@ -186,6 +249,22 @@ export default function App() {
           </div>
         )}
 
+        {hideHint && (
+          <div className="flex items-center gap-3 border-b border-primary/40 bg-primary/10 px-4 py-2 text-xs">
+            <span>
+              <strong className="text-foreground">FileHelm keeps running in the tray.</strong>{" "}
+              Click the pink anchor in your system tray to bring the window back, or right-click for Show/Hide + Quit. Toggle this off in Settings → General.
+            </span>
+            <button
+              className="ml-auto text-muted-foreground hover:text-foreground"
+              onClick={() => setHideHint(false)}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="flex min-h-0 flex-1">
           <aside className="w-[320px] shrink-0 border-r border-border bg-card/40">
             <ProjectList
@@ -203,6 +282,9 @@ export default function App() {
                   setProjects((prev) =>
                     prev.map((x) => (x.id === p.id ? { ...x, ...p } : x)),
                   );
+                }}
+                onPinChanged={() => {
+                  refreshProjects();
                 }}
               />
             ) : (
@@ -280,6 +362,7 @@ function Header({
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <SortPicker />
         <ThemePicker open={themeOpen} onOpenChange={onThemeOpenChange} />
         <Button variant="outline" size="sm" onClick={onOpenGithub}>
           <Github />
