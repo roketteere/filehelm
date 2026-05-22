@@ -42,6 +42,18 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        // Single-instance MUST register before any other plugin so the
+        // second-invocation early-exit fires before we touch the db,
+        // tray icon, or global shortcut. When triggered, the existing
+        // instance's handler un-hides + focuses its main window.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            use tauri::Manager;
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

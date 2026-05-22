@@ -28,6 +28,12 @@ tauri-plugin-shell = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater = "2"
 
+# Single-instance guard — when a user re-launches FileHelm while one
+# is already running, the second invocation surrenders to the first
+# (which focuses + un-hides the window). Without this, two instances
+# race for the OS-global hotkey and one loses.
+tauri-plugin-single-instance = "2"
+
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
