@@ -4,6 +4,12 @@
   "description": "CLI companion for FileHelm — list and launch projects from any terminal.",
   "private": true,
   "type": "module",
+  "author": "Joel Perez (@roketteere) <jxp489@gmail.com>",
+  "contributors": [
+    "Joel Perez (@roketteere) <jxp489@gmail.com>",
+    "Claude (Opus 4.7) <noreply@anthropic.com>"
+  ],
+  "license": "MIT",
   "bin": {
     "helm": "./bin/helm.mjs"
   },

@@ -1,5 +1,8 @@
 # FileHelm — User Guide
 
+Built by **Joel Perez** ([@roketteere](https://github.com/roketteere))
+with **Claude (Opus 4.7)** as pair programmer.
+
 The same content you're reading lives in the repo at `docs/GUIDE.md`
 and inside the app at **Settings → Guide**. Edits to the file
 automatically flow into both surfaces.

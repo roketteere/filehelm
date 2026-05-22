@@ -4,6 +4,10 @@ A tiny standalone CLI that reads FileHelm's local SQLite store at
 `~/.filehelm/db.sqlite` so you can list and launch projects without
 opening the desktop app.
 
+Built by **Joel Perez** ([@roketteere](https://github.com/roketteere))
+with **Claude (Opus 4.7)** as pair programmer — same pairing as the
+desktop app.
+
 ## Install
 
 From the FileHelm repo root:

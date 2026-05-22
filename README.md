@@ -2,6 +2,11 @@
 
 > Local desktop launcher for the dozens of dev projects you keep on disk.
 
+Built by **Joel Perez** ([@roketteere](https://github.com/roketteere))
+with **Claude (Opus 4.7)** as pair programmer. Every line in this repo
+is one of us — design + product calls by Joel; backend, frontend, and
+docs co-authored with Claude.
+
 Point it at a folder of folders. It walks each subdirectory, classifies
 the project by language and framework, extracts run commands from
 `package.json` / `Cargo.toml` / `pyproject.toml` / `Makefile` /
@@ -248,6 +253,12 @@ list lives in `CLAUDE.md` under "Signature window chrome".
 
 ---
 
+## Authors
+
+- **Joel Perez** — [@roketteere](https://github.com/roketteere) — product, UX, calls the shots
+- **Claude (Opus 4.7)** — Anthropic — pair programmer, ships the code
+
 ## License
 
-MIT © 2026 Joel Perez.
+MIT © 2026 Joel Perez ([@roketteere](https://github.com/roketteere)) &
+Claude (Opus 4.7).

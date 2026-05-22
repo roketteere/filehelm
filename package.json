@@ -4,6 +4,16 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Local desktop launcher + dual-pane file commander for dev projects",
+  "author": "Joel Perez (@roketteere) <jxp489@gmail.com>",
+  "contributors": [
+    "Joel Perez (@roketteere) <jxp489@gmail.com>",
+    "Claude (Opus 4.7) <noreply@anthropic.com>"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/roketteere/filehelm"
+  },
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

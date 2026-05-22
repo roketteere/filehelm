@@ -2,7 +2,11 @@
 name = "filehelm"
 version = "0.1.0"
 description = "filehelm — local project launcher + file commander"
-authors = ["Joel Perez"]
+authors = [
+    "Joel Perez (@roketteere) <jxp489@gmail.com>",
+    "Claude (Opus 4.7) <noreply@anthropic.com>",
+]
+repository = "https://github.com/roketteere/filehelm"
 license = "MIT"
 edition = "2021"
 rust-version = "1.78"
