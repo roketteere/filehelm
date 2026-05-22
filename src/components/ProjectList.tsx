@@ -175,7 +175,11 @@ export function ProjectList({
       )}
 
       <ScrollArea className="mt-2 flex-1">
-        <div className="px-2 pb-3">
+        {/* Extra pr-3 so row content (especially the right-side
+            language-icon stack) clears the 10px-wide vertical
+            scrollbar that sits absolute-right inside the
+            ScrollArea root. */}
+        <div className="pb-3 pl-2 pr-3">
           {roots.length === 0 && projects.length === 0 && (
             <div className="px-3 py-8 text-center text-xs text-muted-foreground">
               No projects yet. Add a root directory and scan.
