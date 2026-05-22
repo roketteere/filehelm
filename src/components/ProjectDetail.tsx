@@ -53,6 +53,7 @@ const StatsPanel = lazy(() =>
 );
 import { ipc } from "@/lib/ipc";
 import { prefs } from "@/lib/prefs";
+import { revealLabel, openTerminalLabel } from "@/lib/platform";
 import { cn, formatRelative } from "@/lib/utils";
 import { labelFor } from "@/lib/devicon-map";
 import type { DetectedUrl, Project, ProjectAction } from "@/types";
@@ -373,12 +374,12 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                 variant="outline"
                 size="icon"
                 onClick={() => ipc.openTerminalHere(project.id).catch((e) => setError(String(e)))}
-                aria-label="Open terminal here"
+                aria-label={openTerminalLabel()}
               >
                 <Terminal />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Open terminal here</TooltipContent>
+            <TooltipContent>{openTerminalLabel()}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -386,12 +387,12 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                 variant="outline"
                 size="icon"
                 onClick={() => ipc.openInExplorer(project.id).catch((e) => setError(String(e)))}
-                aria-label="Reveal in Explorer"
+                aria-label={revealLabel()}
               >
                 <FolderOpen />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Reveal in Explorer</TooltipContent>
+            <TooltipContent>{revealLabel()}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>

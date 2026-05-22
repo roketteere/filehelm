@@ -6,6 +6,7 @@
 // Settings → Keybinds tab a thin editor over `loadMap()` / `saveMap()`.
 
 import { useEffect } from "react";
+import { formatKeybind } from "@/lib/platform";
 
 export interface KeyCombo {
   ctrl: boolean;
@@ -141,13 +142,7 @@ export function parse(combo: string): KeyCombo {
 }
 
 export function format(combo: KeyCombo): string {
-  const bits: string[] = [];
-  if (combo.ctrl) bits.push("Ctrl");
-  if (combo.shift) bits.push("Shift");
-  if (combo.alt) bits.push("Alt");
-  if (combo.meta) bits.push("Meta");
-  bits.push(displayKey(combo.key));
-  return bits.join("+");
+  return formatKeybind(combo);
 }
 
 function normalizeKey(k: string): string {
@@ -155,16 +150,6 @@ function normalizeKey(k: string): string {
   if (/^Arrow|^Page|^Home$|^End$|^Escape$|^Enter$|^Tab$|^F\d{1,2}$|^Delete$|^Backspace$|^Space$/.test(k))
     return k;
   if (k.length === 1) return k.toLowerCase();
-  return k;
-}
-
-function displayKey(k: string): string {
-  if (k === "ArrowUp") return "↑";
-  if (k === "ArrowDown") return "↓";
-  if (k === "ArrowLeft") return "←";
-  if (k === "ArrowRight") return "→";
-  if (k === " ") return "Space";
-  if (k.length === 1) return k.toUpperCase();
   return k;
 }
 

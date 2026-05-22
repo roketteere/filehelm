@@ -11,6 +11,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ipc } from "@/lib/ipc";
+import { revealLabel } from "@/lib/platform";
 import { formatRelative } from "@/lib/utils";
 import type { RunHistoryRow } from "@/types";
 
@@ -129,7 +130,7 @@ export function RunHistoryView() {
                   <ContextMenuItem
                     onSelect={() => ipc.openInExplorer(row.project_id).catch(() => {})}
                   >
-                    Reveal project in Explorer
+                    {revealLabel()}
                   </ContextMenuItem>
                   <ContextMenuSeparator />
                   <ContextMenuItem destructive onSelect={() => deleteOne(row.id)}>

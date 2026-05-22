@@ -18,7 +18,9 @@ Built by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 [![Rust](https://img.shields.io/badge/Rust-1.78%2B-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Vite 5](https://img.shields.io/badge/Vite-5-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
-[![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](#preconditions)
+[![Platform: Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](#preconditions)
+[![Platform: macOS](https://img.shields.io/badge/macOS-Intel%20%2B%20Apple%20Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](#preconditions)
+[![Platform: Linux](https://img.shields.io/badge/Linux-AppImage%20%2F%20deb%20%2F%20rpm-FCC624?style=for-the-badge&logo=linux&logoColor=black)](#preconditions)
 
 [Features](#-features-at-a-glance) ·
 [Workflows](#-workflows) ·
@@ -391,14 +393,50 @@ your roots and run history.
 
 ## 🧰 Preconditions
 
-- **Windows 10/11** (other OSes untested in v1; the codebase is
-  largely portable but file-commander OS calls + tray glyph + ConPTY
-  paths assume Win)
+**Supported platforms:** Windows 10/11 · macOS 12+ (Intel + Apple
+Silicon) · Linux (Ubuntu/Debian/Fedora/Arch — anything with webkit2gtk).
+
+### Common to all three OSes (only for building from source)
+
 - **Node 20+** and **pnpm** on PATH
 - **Rust stable** toolchain (1.78+) via `rustup`
-- **Microsoft Edge WebView2 Runtime** — Win11 ships with it
 - **`git`** on PATH — only required for Clone-from-GitHub
 - **`rg` (ripgrep)** on PATH — only required for cross-project search
+
+### Per-OS notes
+
+**Windows** — Microsoft Edge WebView2 Runtime (Win11 ships with it;
+on Win10 install from <https://developer.microsoft.com/microsoft-edge/webview2/>).
+
+**macOS** — No additional dependencies. **The bundle is unsigned at
+this stage** so Gatekeeper will throw a "FileHelm can't be opened
+because Apple cannot check it for malicious software" warning on
+first launch. Two ways past it:
+
+```bash
+# Easiest: right-click FileHelm.app in /Applications, choose Open,
+# confirm the dialog. macOS remembers your choice for next time.
+
+# Or, from Terminal:
+xattr -d com.apple.quarantine /Applications/FileHelm.app
+```
+
+Subsequent launches are friction-free. We may add Developer ID
+notarization in a future release.
+
+**Linux** — desktop deps (Ubuntu / Debian names; the
+equivalents on Fedora / Arch are similar):
+
+```bash
+sudo apt-get install \
+  libwebkit2gtk-4.1-0 \
+  libayatana-appindicator3-1 \
+  librsvg2-2
+```
+
+For building from source you also need the `-dev` variants:
+`libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`,
+`librsvg2-dev`, `libgtk-3-dev`, `patchelf`.
 
 ---
 

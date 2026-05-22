@@ -3,7 +3,17 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ipc } from "@/lib/ipc";
+import { isMacOS, isLinux } from "@/lib/platform";
 import "@xterm/xterm/css/xterm.css";
+
+// Pick a monospace font family that ships natively on each OS so the
+// embedded terminal never falls back to a slab default. JetBrains Mono
+// stays as the preferred override when the user has it installed.
+function monoFontFamily(): string {
+  if (isMacOS()) return '"JetBrains Mono", Menlo, "SF Mono", monospace';
+  if (isLinux()) return '"JetBrains Mono", "DejaVu Sans Mono", "Noto Mono", monospace';
+  return '"JetBrains Mono", "Cascadia Mono", Consolas, monospace';
+}
 
 interface Props {
   sessionId: string;
@@ -21,7 +31,7 @@ export function EmbeddedTerminal({ sessionId, cwd, command, onExit }: Props) {
     if (!hostRef.current) return;
 
     const term = new Terminal({
-      fontFamily: '"JetBrains Mono", "Consolas", monospace',
+      fontFamily: monoFontFamily(),
       fontSize: 12,
       cursorBlink: true,
       theme: {
@@ -29,7 +39,10 @@ export function EmbeddedTerminal({ sessionId, cwd, command, onExit }: Props) {
         foreground: "#d8dee9",
         cursor: "#22d3ee",
       },
-      convertEol: true,
+      // ConPTY (Windows) and openpty (macOS/Linux) both emit canonical
+      // line endings already — extra CR injection here would double up
+      // newlines on POSIX. Off everywhere.
+      convertEol: false,
       scrollback: 5000,
     });
     const fit = new FitAddon();

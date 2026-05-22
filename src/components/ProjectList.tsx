@@ -33,7 +33,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ipc } from "@/lib/ipc";
-import { splitWindowsPath } from "@/lib/path";
+import { splitPath } from "@/lib/path";
+import { revealLabel, openTerminalLabel } from "@/lib/platform";
 import { prefs, type SortMode } from "@/lib/prefs";
 import { cn, formatRelative } from "@/lib/utils";
 import type { Project, Root } from "@/types";
@@ -309,7 +310,7 @@ function RootHeader({
   onToggle: () => void;
   isQueryActive: boolean;
 }) {
-  const segs = splitWindowsPath(root.abs_path);
+  const segs = splitPath(root.abs_path);
   const last = segs[segs.length - 1];
   const parents = segs.slice(0, -1);
 
@@ -435,10 +436,10 @@ function ProjectContextMenu({
           <Code2 /> Open in VS Code
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => ipc.openTerminalHere(project.id).catch(() => {})}>
-          <Terminal /> Open terminal here
+          <Terminal /> {openTerminalLabel()}
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => ipc.openInExplorer(project.id).catch(() => {})}>
-          <FolderOpen /> Reveal in Explorer
+          <FolderOpen /> {revealLabel()}
         </ContextMenuItem>
         <ContextMenuItem onSelect={copyPath}>
           <Copy /> Copy path
@@ -530,7 +531,7 @@ function RootContextMenu({
         <ContextMenuItem
           onSelect={() => ipc.revealPath(root.abs_path).catch(() => {})}
         >
-          <FolderOpen /> Reveal in Explorer
+          <FolderOpen /> {revealLabel()}
         </ContextMenuItem>
         <ContextMenuItem
           onSelect={() => {

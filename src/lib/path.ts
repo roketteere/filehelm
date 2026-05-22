@@ -1,5 +1,7 @@
 // Path helpers — pure functions, no Tauri imports so this is unit-testable
-// in plain Node if we ever add tests.
+// in plain Node.
+
+import { isWindows } from "@/lib/platform";
 
 export interface PathSegment {
   /** Display text for the segment (e.g. "C:\\", "Development", "filehelm"). */
@@ -12,16 +14,27 @@ const WIN_DRIVE_RE = /^([A-Za-z]):[\\/]?/;
 const UNC_RE = /^\\\\([^\\/]+)[\\/]([^\\/]+)/;
 
 /**
- * Split an absolute Windows-style path into navigable segments.
+ * Split an absolute path into navigable segments for the current OS.
  *
- * Tolerates both `\` and `/` separators in the input but always renders
- * output with `\` for Explorer interop. Handles UNC paths defensively:
- * `\\server\share\foo` yields `[{label: "\\\\server\\share", absPath:
- * "\\\\server\\share"}, {label: "foo", absPath: "\\\\server\\share\\foo"}]`.
+ * On Windows: handles drive letters (`C:\…`), UNC (`\\server\share\…`),
+ * and tolerates mixed `\` / `/` input. Output always uses `\`.
+ *
+ * On POSIX (macOS/Linux): roots at `/`, splits on `/`. The first
+ * segment is always `{ label: "/", absPath: "/" }` for absolute paths;
+ * relative paths return segments without a leading-slash segment.
+ */
+export function splitPath(abs: string): PathSegment[] {
+  if (!abs) return [];
+  return isWindows() ? splitWindowsPath(abs) : splitPosixPath(abs);
+}
+
+/**
+ * Windows-specific splitter. Kept as a public export because some
+ * callers may pre-know they're handling a Windows-style path (e.g.
+ * server-rendered text from a Windows backend).
  */
 export function splitWindowsPath(abs: string): PathSegment[] {
   if (!abs) return [];
-  // Normalise slashes for parsing but preserve the original semantics.
   const normalized = abs.replace(/\//g, "\\");
 
   // UNC: \\server\share\rest...
@@ -29,7 +42,7 @@ export function splitWindowsPath(abs: string): PathSegment[] {
   if (unc) {
     const root = `\\\\${unc[1]}\\${unc[2]}`;
     const rest = normalized.slice(root.length).replace(/^[\\]+/, "");
-    return walk(root, rest);
+    return walk(root, rest, "\\");
   }
 
   // Drive-letter: C:\rest...
@@ -37,27 +50,48 @@ export function splitWindowsPath(abs: string): PathSegment[] {
   if (drive) {
     const root = `${drive[1]}:\\`;
     const rest = normalized.slice(drive[0].length).replace(/^[\\]+/, "");
-    return walk(root, rest);
+    return walk(root, rest, "\\");
   }
 
-  // Fallback: relative or POSIX path — just split on \ and chain.
+  // Fallback: relative or non-rooted — split on \ and chain.
   const parts = normalized.split("\\").filter(Boolean);
-  const out: PathSegment[] = [];
-  let acc = "";
+  return chain(parts, "\\");
+}
+
+function splitPosixPath(abs: string): PathSegment[] {
+  // Treat any backslashes from upstream Windows-y strings as separators
+  // too — defensive against callers that hand us mixed input.
+  const normalized = abs.replace(/\\/g, "/");
+  if (normalized.startsWith("/")) {
+    const rest = normalized.slice(1).replace(/^\/+/, "");
+    return walk("/", rest, "/");
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  return chain(parts, "/");
+}
+
+function walk(root: string, rest: string, sep: string): PathSegment[] {
+  const out: PathSegment[] = [{ label: root, absPath: root }];
+  if (!rest) return out;
+  const parts = rest.split(new RegExp(sep === "/" ? "/+" : "\\\\+")).filter(Boolean);
+  // Strip trailing separator on the accumulator before joining new parts.
+  let acc = root.replace(new RegExp(sep === "/" ? "/+$" : "\\\\+$"), "");
+  // Edge case: POSIX root is just "/" and acc becomes "" after the strip.
+  // Re-prepend the separator before joining so we don't end up with
+  // "foo" instead of "/foo".
+  if (acc === "" && sep === "/") acc = "";
   for (const p of parts) {
-    acc = acc ? `${acc}\\${p}` : p;
+    acc = acc ? `${acc}${sep}${p}` : `${sep}${p}`;
     out.push({ label: p, absPath: acc });
   }
   return out;
 }
 
-function walk(root: string, rest: string): PathSegment[] {
-  const out: PathSegment[] = [{ label: root, absPath: root }];
-  if (!rest) return out;
-  const parts = rest.split("\\").filter(Boolean);
-  let acc = root.replace(/[\\]+$/, "");
+function chain(parts: string[], sep: string): PathSegment[] {
+  const out: PathSegment[] = [];
+  let acc = "";
   for (const p of parts) {
-    acc = `${acc}\\${p}`;
+    acc = acc ? `${acc}${sep}${p}` : p;
     out.push({ label: p, absPath: acc });
   }
   return out;
@@ -65,6 +99,6 @@ function walk(root: string, rest: string): PathSegment[] {
 
 /** Just the last segment of an absolute path. */
 export function basename(abs: string): string {
-  const segs = splitWindowsPath(abs);
+  const segs = splitPath(abs);
   return segs[segs.length - 1]?.label ?? abs;
 }

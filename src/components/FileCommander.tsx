@@ -41,7 +41,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ipc } from "@/lib/ipc";
-import { splitWindowsPath } from "@/lib/path";
+import { splitPath } from "@/lib/path";
+import { joinPath, revealLabel } from "@/lib/platform";
 import { cn, formatRelative } from "@/lib/utils";
 import { openPath } from "@tauri-apps/plugin-opener";
 import type { DirEntry } from "@/types";
@@ -189,7 +190,7 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
   const navigateUp = useCallback(
     async (side: Side) => {
       const state = side === "left" ? left : right;
-      const segs = splitWindowsPath(state.cwd);
+      const segs = splitPath(state.cwd);
       if (segs.length <= 1) return;
       await refreshPane(side, segs[segs.length - 2].absPath);
     },
@@ -353,7 +354,7 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
       initial: defaultName,
       onSubmit: async (name) => {
         if (!name.trim()) return;
-        const dest = `${activeState.cwd}\\${name.trim()}`;
+        const dest = joinPath(activeState.cwd, name.trim());
         setBusy("zip");
         try {
           await ipc.fsZip(
@@ -938,7 +939,7 @@ function Pane({
   ops: PaneOps;
 }) {
   const listRef = useRef<HTMLUListElement | null>(null);
-  const segments = useMemo(() => splitWindowsPath(state.cwd), [state.cwd]);
+  const segments = useMemo(() => splitPath(state.cwd), [state.cwd]);
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -1105,7 +1106,7 @@ function Pane({
                     Copy full path
                   </ContextMenuItem>
                   <ContextMenuItem onSelect={() => ops.reveal(entry.path)}>
-                    Reveal in Windows Explorer
+                    {revealLabel()}
                   </ContextMenuItem>
                   <ContextMenuSeparator />
                   <ContextMenuItem destructive onSelect={ops.delete}>
@@ -1136,7 +1137,7 @@ function Pane({
                 Open this folder
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => ops.reveal(state.cwd)}>
-                Reveal in Explorer
+                {revealLabel()}
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => ops.copyPath(state.cwd)}>
                 Copy folder path

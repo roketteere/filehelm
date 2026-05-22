@@ -1,9 +1,10 @@
 name: release
 
 # Trigger on a version-tag push or a manual dispatch. The tag format is
-# `filehelm-vX.Y.Z`. The workflow builds signed installers for Windows
-# (today's only supported platform) and publishes them as a GitHub
-# Release alongside a `latest.json` that the in-app updater polls.
+# `filehelm-vX.Y.Z`. The workflow builds signed installers for every
+# supported platform (Linux, macOS Intel + Apple Silicon, Windows) and
+# publishes them as a GitHub Release alongside a single canonical
+# `latest.json` that the in-app updater polls.
 #
 # Secrets required on the repo (Settings → Secrets and variables →
 # Actions):
@@ -12,9 +13,11 @@ name: release
 #   - TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — leave empty string if the
 #       keypair was generated with `--password ""` (the default we use)
 #
-# Until Joel pushes to GitHub + adds those secrets, this workflow is
-# dormant. Existing installs that hit "Check for updates" will keep
-# 404'ing — exactly as documented.
+# The minisign keypair signs all four platforms from the same private
+# key. macOS bundles are NOT Apple-Developer-ID-notarized at this
+# stage — users see a one-time Gatekeeper warning and use the
+# documented `xattr -d com.apple.quarantine` workaround. See
+# RELEASING.md for the full release flow.
 
 on:
   push:
@@ -30,11 +33,43 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    name: build ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ""
+          - label: macos-x86_64
+            runner: macos-13
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
+          - label: macos-aarch64
+            runner: macos-14
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+          - label: windows-x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libgtk-3-dev \
+            patchelf
 
       - name: Install Node + pnpm
         uses: pnpm/action-setup@v4
@@ -46,8 +81,10 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install Rust
+      - name: Install Rust + matrix target
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -56,7 +93,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: ${{ matrix.runner }}-${{ matrix.target }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
 
       - name: pnpm install
         run: pnpm install --frozen-lockfile
@@ -75,10 +112,127 @@ jobs:
 
             The desktop app checks for updates via
             `Settings → Check for updates`. Bundles are signed with
-            the keypair tracked in `.secrets/credentials.md`.
+            the minisign keypair tracked in `.secrets/credentials.md`;
+            macOS bundles are NOT Apple-Developer-ID notarized at this
+            stage — see README for the one-time Gatekeeper workaround.
           releaseDraft: false
           prerelease: false
           # `tauri-action` automatically generates and uploads a
-          # `latest.json` manifest matching the endpoint baked into
-          # `src-tauri/tauri.conf.json`. No extra step needed.
+          # per-platform `*.sig` + an updater JSON. We merge all four
+          # into one canonical `latest.json` in the next job.
           includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+      - name: Upload per-platform updater JSON artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-${{ matrix.label }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/**/latest.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+  compose-updater-json:
+    name: compose canonical latest.json
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download per-platform updater JSON artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: updater-artifacts
+          pattern: updater-*
+          merge-multiple: false
+
+      - name: Compose canonical latest.json
+        id: compose
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name || format('filehelm-v{0}', inputs.version_tag) }}
+        run: |
+          set -euo pipefail
+          node <<'EOF'
+          const fs = require('fs');
+          const path = require('path');
+          const root = 'updater-artifacts';
+          const dirs = fs.readdirSync(root).filter(d =>
+            fs.statSync(path.join(root, d)).isDirectory());
+
+          // Map from artifact-name suffix → Tauri platform key.
+          const keyMap = {
+            'linux-x86_64':   'linux-x86_64',
+            'macos-x86_64':   'darwin-x86_64',
+            'macos-aarch64':  'darwin-aarch64',
+            'windows-x86_64': 'windows-x86_64',
+          };
+
+          const platforms = {};
+          let version = null;
+          let notes = null;
+          let pubDate = null;
+
+          for (const dir of dirs) {
+            const m = dir.match(/^updater-(.+)$/);
+            if (!m) continue;
+            const tauriKey = keyMap[m[1]];
+            if (!tauriKey) continue;
+
+            // Find the per-platform JSON anywhere under this dir.
+            const search = (d) => {
+              for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+                const p = path.join(d, e.name);
+                if (e.isDirectory()) {
+                  const r = search(p);
+                  if (r) return r;
+                } else if (e.name === 'latest.json') {
+                  return p;
+                }
+              }
+              return null;
+            };
+            const file = search(path.join(root, dir));
+            if (!file) {
+              console.warn(`no latest.json in ${dir}`);
+              continue;
+            }
+
+            const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+            version ??= j.version;
+            notes ??= j.notes;
+            pubDate ??= j.pub_date;
+
+            // Tauri v2 per-platform: { signature, url } per key. The
+            // single-platform JSON may use either a top-level pair or
+            // a `platforms` map — handle both shapes.
+            if (j.platforms) {
+              for (const [k, v] of Object.entries(j.platforms)) {
+                platforms[k] = v;
+              }
+            } else if (j.url && j.signature) {
+              platforms[tauriKey] = { signature: j.signature, url: j.url };
+            }
+          }
+
+          const out = {
+            version,
+            notes: notes ?? 'See release notes on GitHub.',
+            pub_date: pubDate ?? new Date().toISOString(),
+            platforms,
+          };
+
+          fs.writeFileSync('latest.json', JSON.stringify(out, null, 2));
+          console.log(JSON.stringify(out, null, 2));
+          EOF
+
+      - name: Attach canonical latest.json to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name || format('filehelm-v{0}', inputs.version_tag) }}
+        run: |
+          set -euo pipefail
+          # Replace any existing latest.json the matrix jobs may have
+          # left behind with our composed canonical version.
+          gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"

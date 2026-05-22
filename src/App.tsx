@@ -9,7 +9,7 @@ import { ThemePicker } from "@/components/ThemePicker";
 import { TitleBar } from "@/components/TitleBar";
 import { SortPicker } from "@/components/SortPicker";
 import { applyStoredTheme } from "@/lib/theme";
-import { onAction, useKeybinds } from "@/lib/keybinds";
+import { combosFor, format as fmtCombo, onAction, useKeybinds } from "@/lib/keybinds";
 import { ipc } from "@/lib/ipc";
 import { prefs } from "@/lib/prefs";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -444,7 +444,7 @@ function Header({
           variant="outline"
           size="sm"
           onClick={onOpenFiles}
-          title="File commander (Ctrl+Shift+E)"
+          title={`File commander (${fmtCombo(combosFor("open-files")[0])})`}
         >
           <Files />
           <span className="hidden lg:inline">Commander</span>
@@ -466,7 +466,7 @@ function Header({
           size="icon"
           onClick={onOpenSettings}
           aria-label="Settings"
-          title="Settings (Ctrl+,)"
+          title={`Settings (${fmtCombo(combosFor("open-settings")[0])})`}
         >
           <Settings />
         </Button>

@@ -1,7 +1,8 @@
 import { ChevronRight, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { splitWindowsPath } from "@/lib/path";
+import { splitPath } from "@/lib/path";
+import { openFolderLabel } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 interface BreadcrumbProps {
@@ -23,7 +24,8 @@ export function Breadcrumb({
   copyable = true,
   className,
 }: BreadcrumbProps) {
-  const segments = splitWindowsPath(path);
+  const segments = splitPath(path);
+  const openLabel = openFolderLabel();
   const [copied, setCopied] = useState(false);
 
   const onCopy = async () => {
@@ -67,7 +69,7 @@ export function Breadcrumb({
                       {seg.label}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>Open {seg.absPath} in Explorer</TooltipContent>
+                  <TooltipContent>{openLabel}: {seg.absPath}</TooltipContent>
                 </Tooltip>
               ) : (
                 <span

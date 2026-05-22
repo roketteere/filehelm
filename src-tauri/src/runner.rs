@@ -175,12 +175,12 @@ pub fn list_external_launches() -> Vec<(i64, i64)> {
 }
 
 pub fn open_editor(project_path: &Path) -> AppResult<()> {
-    // Prefer VS Code via PATH (`code`). Falls back to opening the folder
-    // in Explorer (Windows) — the frontend tauri-plugin-opener can be used
-    // for richer URL/file handling.
+    // Prefer VS Code via PATH (`code`). On Windows that's a .cmd shim
+    // so we go through cmd.exe; on macOS we additionally try the App-
+    // bundle path because users often haven't run "Shell Command:
+    // Install 'code' command in PATH" yet.
     #[cfg(target_os = "windows")]
     {
-        // `code` is a .cmd shim on Windows; spawn via cmd.exe so PATH/.cmd works.
         let res = Command::new("cmd.exe")
             .args(["/C", "code"])
             .arg(project_path)
@@ -188,11 +188,28 @@ pub fn open_editor(project_path: &Path) -> AppResult<()> {
         if res.is_ok() {
             return Ok(());
         }
-        // Last-resort fallback.
         Command::new("explorer.exe").arg(project_path).spawn()?;
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        if Command::new("code").arg(project_path).spawn().is_ok() {
+            return Ok(());
+        }
+        // `open -a "Visual Studio Code" <path>` — most reliable Mac fallback.
+        if Command::new("open")
+            .args(["-a", "Visual Studio Code"])
+            .arg(project_path)
+            .spawn()
+            .is_ok()
+        {
+            return Ok(());
+        }
+        Err(AppError::Invalid(
+            "VS Code not found — install via `brew install --cask visual-studio-code` or run \"Shell Command: Install 'code' command in PATH\" from VS Code.".into(),
+        ))
+    }
+    #[cfg(target_os = "linux")]
     {
         if Command::new("code").arg(project_path).spawn().is_ok() {
             return Ok(());
@@ -216,10 +233,50 @@ pub fn open_terminal_at(working_dir: &Path) -> AppResult<()> {
             .spawn()?;
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
-        let _ = working_dir;
+        // `open -a Terminal <dir>` opens a new Terminal.app window at
+        // the target dir. Honors the user's default terminal via
+        // `$TERM_PROGRAM` only when invoked from inside it — `open -a`
+        // always picks macOS's defaultterminal-app association.
+        Command::new("open")
+            .args(["-a", "Terminal"])
+            .arg(working_dir)
+            .spawn()
+            .map_err(AppError::Io)?;
         Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Try the de-facto terminal emulators in order. First spawn
+        // wins; we surface a precise error if none are on PATH.
+        let candidates: &[(&str, &[&str])] = &[
+            // x-terminal-emulator is the Debian alternatives wrapper.
+            ("x-terminal-emulator", &["--working-directory"]),
+            ("gnome-terminal", &["--working-directory"]),
+            ("konsole", &["--workdir"]),
+            ("xfce4-terminal", &["--working-directory"]),
+            ("tilix", &["-w"]),
+            ("kitty", &["-d"]),
+            ("alacritty", &["--working-directory"]),
+            ("xterm", &[]),
+        ];
+        for (bin, flag) in candidates {
+            let mut cmd = Command::new(bin);
+            // gnome-terminal et al want `--working-directory=<path>`
+            // as a single token; xterm has no flag and just inherits.
+            if !flag.is_empty() {
+                cmd.arg(format!("{}={}", flag[0], working_dir.display()));
+            } else {
+                cmd.current_dir(working_dir);
+            }
+            if cmd.spawn().is_ok() {
+                return Ok(());
+            }
+        }
+        Err(AppError::Invalid(
+            "no terminal emulator found on PATH — install one of: gnome-terminal, konsole, xfce4-terminal, kitty, alacritty, xterm".into(),
+        ))
     }
 }
 
@@ -232,9 +289,26 @@ pub fn reveal_in_explorer(target_path: &Path) -> AppResult<()> {
             .spawn()?;
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
-        let _ = target_path;
+        // `open -R <file>` reveals the file in Finder (selects it).
+        Command::new("open")
+            .arg("-R")
+            .arg(target_path)
+            .spawn()
+            .map_err(AppError::Io)?;
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Linux file managers (Nautilus, Dolphin, Thunar, …) don't
+        // share a "select this file" affordance. Best we can do
+        // portably is open the containing directory via xdg-open.
+        let parent = target_path.parent().unwrap_or(target_path);
+        Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(AppError::Io)?;
         Ok(())
     }
 }
@@ -245,9 +319,20 @@ pub fn open_in_explorer(target_path: &Path) -> AppResult<()> {
         Command::new("explorer.exe").arg(target_path).spawn()?;
         Ok(())
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
-        let _ = target_path;
+        Command::new("open")
+            .arg(target_path)
+            .spawn()
+            .map_err(AppError::Io)?;
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(target_path)
+            .spawn()
+            .map_err(AppError::Io)?;
         Ok(())
     }
 }

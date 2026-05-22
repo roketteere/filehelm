@@ -39,6 +39,28 @@ go wrong in practice. For a faster intro, see the README.
 
 ---
 
+## Platform support
+
+FileHelm ships **signed installers** for:
+
+- **Windows 10/11** — `.msi` and `.exe` (NSIS) installers
+- **macOS 12+ (Intel + Apple Silicon)** — `.dmg` and `.app.tar.gz`
+- **Linux** — `.deb`, `.rpm`, and `.AppImage`
+
+The bundles are signed with the same minisign keypair, so the
+in-app auto-updater works on all three OSes from the same `latest.json`.
+
+**Important macOS note:** bundles are NOT Apple-Developer-ID-notarized
+yet, so first launch needs the **right-click → Open** workaround or
+`xattr -d com.apple.quarantine /Applications/FileHelm.app`. See the
+README "Preconditions" section for details.
+
+**Linux runtime deps:** webkit2gtk and libayatana-appindicator.
+Install via your distro's package manager (Ubuntu/Debian: `apt
+install libwebkit2gtk-4.1-0 libayatana-appindicator3-1 librsvg2-2`).
+
+---
+
 ## What FileHelm is
 
 A local desktop launcher + dual-pane file commander for the dozens
@@ -60,8 +82,9 @@ No cloud. No telemetry.
 2. FileHelm scans one level deep, classifies each project, and
    populates the left rail grouped under the root.
 3. Click any project → its detail pane opens with detected actions.
-4. Click any action card → spawns the command in a Windows Terminal
-   window at the project's working directory.
+4. Click any action card → spawns the command in your system
+   terminal (Windows Terminal / Terminal.app / your default
+   Linux terminal emulator) at the project's working directory.
 5. Press `Ctrl+Shift+E` to open the dual-pane file commander; press
    `Ctrl+Shift+F` for cross-project ripgrep; press `Ctrl+Alt+Space`
    from anywhere to toggle the window.
@@ -218,12 +241,13 @@ Every detected runnable command shows as a card with:
 - Where it was detected from (e.g. `package.json:scripts.dev`,
   `Cargo.toml:[[bin]]=my-app`, `README.md#3`)
 
-Click the card → opens the command in either Windows Terminal at
-the project's cwd *or* the embedded PTY panel, depending on the
+Click the card → opens the command in your system terminal at the
+project's cwd *or* the embedded PTY panel, depending on the
 **Embedded terminal** toggle in Settings → General.
 
 While an action is running, the card shows a **Stop** button.
-External terminal launches use Windows' `taskkill /T /F` against
+External launches send a kill signal (Windows' `taskkill /T /F`;
+`kill -TERM` on POSIX) against
 the tracked PID; embedded launches cancel the event stream and
 drop the PTY.
 
@@ -257,12 +281,12 @@ only reclassify projects whose manifests changed.
 
 Toggle in **Settings → General → Run actions in embedded terminal**.
 When on, action launches drop a 288px-tall xterm.js panel at the
-bottom of the detail pane instead of spawning Windows Terminal.
+bottom of the detail pane instead of spawning the external terminal.
 
 Under the hood:
 
-- `portable-pty 0.8` opens a ConPTY (Windows native PTY) at the
-  project cwd
+- `portable-pty 0.8` opens a ConPTY on Windows / `openpty` on
+  macOS + Linux at the project cwd
 - Rows are streamed over Tauri events on
   `filehelm:pty:<session-id>`
 - xterm.js renders + forwards keystrokes via the `pty_write`
@@ -633,9 +657,10 @@ sort on next refresh.
    stacked language icons.
 4. Click **filehelm** in the left rail. Detail pane opens with
    tabs: Actions, README, CHANGELOG, Git, Stats.
-5. Click the `pnpm tauri dev` action card. A Windows Terminal
-   window opens at `C:\Development\Claude\filehelm`, running the
-   command. Card shows a Stop button.
+5. Click the `pnpm tauri dev` action card. Your system terminal
+   opens at `C:\Development\Claude\filehelm` (or `/Users/joel/dev/filehelm`
+   / `/home/joel/dev/filehelm`), running the command. Card shows a
+   Stop button.
 6. Press `Ctrl+Alt+Space` — FileHelm hides. Switch to another app.
    Press `Ctrl+Alt+Space` again — FileHelm pops back.
 
@@ -660,7 +685,7 @@ sort on next refresh.
    - `cargo test`
 4. Save. Bootstrap appears as a card at the top of the Actions
    tab.
-5. Click it. One Windows Terminal runs `cargo build ; cargo test`
+5. Click it. One terminal window runs `cargo build ; cargo test`
    end-to-end.
 
 ### Example 4 — find every TODO across all your projects
@@ -776,7 +801,7 @@ so future Claude sessions don't lose this.
 ConPTY enforces UTF-8 on Windows 10+. If you're on an older build,
 some non-UTF-8 output (legacy `chcp 437`-style binaries) may
 render incorrectly. Toggle off the embedded option in Settings →
-General and that action launches in Windows Terminal instead.
+General and that action launches in your external terminal instead.
 
 ### Cargo build fails with "tauri-build cannot find dist/"
 
