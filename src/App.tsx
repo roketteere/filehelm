@@ -39,6 +39,25 @@ const Splash = lazy(() =>
 // Apply persisted theme before React mounts so the first paint matches.
 applyStoredTheme();
 
+// Suppress the default browser context menu (the "Reload / Inspect"
+// noise) everywhere except inside text inputs where the native
+// paste/cut/copy menu is genuinely useful. Surfaces that wrap rows in
+// Radix's ContextMenuTrigger still get their custom menu — Radix runs
+// on the same event so the suppression doesn't interfere.
+if (typeof window !== "undefined") {
+  window.addEventListener("contextmenu", (e) => {
+    const t = e.target as HTMLElement | null;
+    if (!t) return;
+    if (
+      t.tagName === "INPUT" ||
+      t.tagName === "TEXTAREA" ||
+      t.isContentEditable
+    )
+      return;
+    e.preventDefault();
+  });
+}
+
 export default function App() {
   const [roots, setRoots] = useState<Root[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

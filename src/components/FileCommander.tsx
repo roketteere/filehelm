@@ -31,6 +31,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { ipc } from "@/lib/ipc";
 import { splitWindowsPath } from "@/lib/path";
 import { cn, formatRelative } from "@/lib/utils";
@@ -519,46 +528,71 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
         />
 
         <div className="grid grid-cols-2 gap-3">
-          <Pane
-            label="Left"
-            state={left}
-            isActive={active === "left"}
-            onActivate={() => setActive("left")}
-            onSelect={(i) => setLeft((s) => ({ ...s, focusedIndex: i }))}
-            onToggleSelect={(path) =>
-              setLeft((s) => {
-                const next = new Set(s.selected);
-                if (next.has(path)) next.delete(path);
-                else next.add(path);
-                return { ...s, selected: next };
-              })
-            }
-            onEnter={(e) => navigateInto("left", e)}
-            onUp={() => navigateUp("left")}
-            onPathClick={(p) => refreshPane("left", p)}
-            onRefresh={() => refreshPane("left", left.cwd)}
-            home={home}
-          />
-          <Pane
-            label="Right"
-            state={right}
-            isActive={active === "right"}
-            onActivate={() => setActive("right")}
-            onSelect={(i) => setRight((s) => ({ ...s, focusedIndex: i }))}
-            onToggleSelect={(path) =>
-              setRight((s) => {
-                const next = new Set(s.selected);
-                if (next.has(path)) next.delete(path);
-                else next.add(path);
-                return { ...s, selected: next };
-              })
-            }
-            onEnter={(e) => navigateInto("right", e)}
-            onUp={() => navigateUp("right")}
-            onPathClick={(p) => refreshPane("right", p)}
-            onRefresh={() => refreshPane("right", right.cwd)}
-            home={home}
-          />
+          {(["left", "right"] as const).map((side) => {
+            const isActive = active === side;
+            const state = side === "left" ? left : right;
+            return (
+              <Pane
+                key={side}
+                label={side === "left" ? "Left" : "Right"}
+                state={state}
+                isActive={isActive}
+                onActivate={() => setActive(side)}
+                onSelect={(i) => {
+                  if (side === "left") setLeft((s) => ({ ...s, focusedIndex: i }));
+                  else setRight((s) => ({ ...s, focusedIndex: i }));
+                }}
+                onToggleSelect={(path) => {
+                  const setter = side === "left" ? setLeft : setRight;
+                  setter((s) => {
+                    const next = new Set(s.selected);
+                    if (next.has(path)) next.delete(path);
+                    else next.add(path);
+                    return { ...s, selected: next };
+                  });
+                }}
+                onContextMenuOnRow={(entry, idx) => {
+                  // Activate pane, set focus, and if right-clicked
+                  // outside the current selection, narrow the
+                  // selection to just this entry.
+                  setActive(side);
+                  const setter = side === "left" ? setLeft : setRight;
+                  setter((s) => {
+                    if (s.selected.has(entry.path)) {
+                      // Keep multi-selection.
+                      return { ...s, focusedIndex: idx };
+                    }
+                    return { ...s, focusedIndex: idx, selected: new Set() };
+                  });
+                }}
+                onEnter={(e) => navigateInto(side, e)}
+                onUp={() => navigateUp(side)}
+                onPathClick={(p) => refreshPane(side, p)}
+                onRefresh={() => refreshPane(side, state.cwd)}
+                home={home}
+                ops={{
+                  view: opView,
+                  edit: opEdit,
+                  copy: opCopy,
+                  move: opMove,
+                  rename: opRename,
+                  delete: opDelete,
+                  zip: opZip,
+                  unzip: opUnzip,
+                  mkdir: opMkdir,
+                  reveal: (p) => ipc.revealPath(p).catch(() => {}),
+                  copyPath: (p) => navigator.clipboard.writeText(p).catch(() => {}),
+                  openHere: (p) => openPath(p).catch(() => {}),
+                  swap: () => {
+                    const lcwd = left.cwd;
+                    const rcwd = right.cwd;
+                    void refreshPane("left", rcwd);
+                    void refreshPane("right", lcwd);
+                  },
+                }}
+              />
+            );
+          })}
         </div>
 
         {error && (
@@ -858,6 +892,22 @@ function KbdHint({ k, l }: { k: string; l: string }) {
 
 // ---------- Pane ----------
 
+interface PaneOps {
+  view: () => void;
+  edit: () => void;
+  copy: () => void;
+  move: () => void;
+  rename: () => void;
+  delete: () => void;
+  zip: () => void;
+  unzip: () => void;
+  mkdir: () => void;
+  reveal: (p: string) => void;
+  copyPath: (p: string) => void;
+  openHere: (p: string) => void;
+  swap: () => void;
+}
+
 function Pane({
   label,
   state,
@@ -865,11 +915,13 @@ function Pane({
   onActivate,
   onSelect,
   onToggleSelect,
+  onContextMenuOnRow,
   onEnter,
   onUp,
   onPathClick,
   onRefresh,
   home,
+  ops,
 }: {
   label: string;
   state: PaneState;
@@ -877,11 +929,13 @@ function Pane({
   onActivate: () => void;
   onSelect: (i: number) => void;
   onToggleSelect: (path: string) => void;
+  onContextMenuOnRow: (entry: DirEntry, idx: number) => void;
   onEnter: (e: DirEntry) => void;
   onUp: () => void;
   onPathClick: (p: string) => void;
   onRefresh: () => void;
   home: string;
+  ops: PaneOps;
 }) {
   const listRef = useRef<HTMLUListElement | null>(null);
   const segments = useMemo(() => splitWindowsPath(state.cwd), [state.cwd]);
@@ -956,54 +1010,144 @@ function Pane({
           state.entries.map((entry, i) => {
             const isSelected = state.selected.has(entry.path);
             const isFocused = state.focusedIndex === i;
+            const isZip = entry.name.toLowerCase().endsWith(".zip");
             return (
-              <li
-                key={entry.path}
-                onClick={(e) => {
-                  if (e.ctrlKey) onToggleSelect(entry.path);
-                  else onSelect(i);
-                }}
-                onDoubleClick={() => onEnter(entry)}
-                title={entry.path}
-                className={cn(
-                  "flex cursor-default items-center gap-2 py-1 pl-2 pr-3 font-mono text-[11px]",
-                  isSelected && "bg-primary/10",
-                  isFocused && isActive && "bg-primary/20 text-foreground",
-                  isFocused && !isActive && "bg-accent",
-                )}
-              >
-                <span
-                  className={cn(
-                    "grid h-3.5 w-3.5 shrink-0 place-items-center rounded-sm border",
-                    isSelected
-                      ? "border-primary bg-primary/40"
-                      : "border-border/60",
+              <ContextMenu key={entry.path}>
+                <ContextMenuTrigger asChild>
+                  <li
+                    onClick={(e) => {
+                      if (e.ctrlKey) onToggleSelect(entry.path);
+                      else onSelect(i);
+                    }}
+                    onDoubleClick={() => onEnter(entry)}
+                    onContextMenu={() => onContextMenuOnRow(entry, i)}
+                    title={entry.path}
+                    className={cn(
+                      "flex cursor-default items-center gap-2 py-1 pl-2 pr-3 font-mono text-[11px]",
+                      isSelected && "bg-primary/10",
+                      isFocused && isActive && "bg-primary/20 text-foreground",
+                      isFocused && !isActive && "bg-accent",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "grid h-3.5 w-3.5 shrink-0 place-items-center rounded-sm border",
+                        isSelected
+                          ? "border-primary bg-primary/40"
+                          : "border-border/60",
+                      )}
+                      aria-hidden
+                    >
+                      {isSelected && <span className="block h-1.5 w-1.5 rounded-[1px] bg-primary-foreground" />}
+                    </span>
+                    {entry.is_dir ? (
+                      <Folder className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+                    ) : isZip ? (
+                      <Package className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                    ) : (
+                      <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                    {entry.modified_iso && (
+                      <span className="hidden shrink-0 pl-2 text-[10px] text-muted-foreground/70 md:inline">
+                        {formatRelative(entry.modified_iso)}
+                      </span>
+                    )}
+                    {!entry.is_dir && (
+                      <span className="shrink-0 pl-3 text-[10px] tabular-nums text-muted-foreground">
+                        {formatBytes(entry.size)}
+                      </span>
+                    )}
+                  </li>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuLabel className="truncate">{entry.name}</ContextMenuLabel>
+                  <ContextMenuItem onSelect={() => onEnter(entry)}>
+                    {entry.is_dir ? "Open folder" : "Open"}
+                    <ContextMenuShortcut>Enter</ContextMenuShortcut>
+                  </ContextMenuItem>
+                  {!entry.is_dir && (
+                    <>
+                      <ContextMenuItem onSelect={ops.view}>
+                        View
+                        <ContextMenuShortcut>F3</ContextMenuShortcut>
+                      </ContextMenuItem>
+                      <ContextMenuItem onSelect={ops.edit}>
+                        Edit
+                        <ContextMenuShortcut>F4</ContextMenuShortcut>
+                      </ContextMenuItem>
+                    </>
                   )}
-                  aria-hidden
-                >
-                  {isSelected && <span className="block h-1.5 w-1.5 rounded-[1px] bg-primary-foreground" />}
-                </span>
-                {entry.is_dir ? (
-                  <Folder className="h-3.5 w-3.5 shrink-0 text-primary/80" />
-                ) : entry.name.toLowerCase().endsWith(".zip") ? (
-                  <Package className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                ) : (
-                  <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                )}
-                <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                {entry.modified_iso && (
-                  <span className="hidden shrink-0 pl-2 text-[10px] text-muted-foreground/70 md:inline">
-                    {formatRelative(entry.modified_iso)}
-                  </span>
-                )}
-                {!entry.is_dir && (
-                  <span className="shrink-0 pl-3 text-[10px] tabular-nums text-muted-foreground">
-                    {formatBytes(entry.size)}
-                  </span>
-                )}
-              </li>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={ops.copy}>
+                    Copy → other pane
+                    <ContextMenuShortcut>F5</ContextMenuShortcut>
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={ops.move}>
+                    Move → other pane
+                    <ContextMenuShortcut>F6</ContextMenuShortcut>
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={ops.rename}>
+                    Rename
+                    <ContextMenuShortcut>F2</ContextMenuShortcut>
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={ops.zip}>
+                    Zip selection…
+                  </ContextMenuItem>
+                  {isZip && (
+                    <ContextMenuItem onSelect={ops.unzip}>
+                      Unzip → other pane
+                    </ContextMenuItem>
+                  )}
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => ops.copyPath(entry.path)}>
+                    Copy full path
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => ops.reveal(entry.path)}>
+                    Reveal in Windows Explorer
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem destructive onSelect={ops.delete}>
+                    Delete
+                    <ContextMenuShortcut>F8</ContextMenuShortcut>
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
+        {/* Background context menu: trigger lives at the end of the
+            list so right-click in the empty area pops it. */}
+        {!state.loading && (
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <li className="min-h-[2rem] flex-1" aria-hidden />
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuLabel className="truncate">{state.cwd}</ContextMenuLabel>
+              <ContextMenuItem onSelect={ops.mkdir}>
+                New folder
+                <ContextMenuShortcut>F7</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={onRefresh}>
+                Refresh
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => ops.openHere(state.cwd)}>
+                Open this folder
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => ops.reveal(state.cwd)}>
+                Reveal in Explorer
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => ops.copyPath(state.cwd)}>
+                Copy folder path
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={ops.swap}>
+                Swap panes
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        )}
       </ul>
       <div className="border-t border-border bg-card/40 px-2 py-1 text-[10px] text-muted-foreground">
         {state.entries.length} item{state.entries.length === 1 ? "" : "s"}

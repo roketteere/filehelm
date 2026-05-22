@@ -80,6 +80,12 @@ export const ipc = {
   // Run history
   listRunHistory: (limit = 50) =>
     invoke<RunHistoryRow[]>("list_run_history", { limit }),
+  deleteRunHistory: (id: number) =>
+    invoke<void>("delete_run_history", { id }),
+  clearRunHistory: () => invoke<number>("clear_run_history"),
+
+  // Project remove
+  deleteProject: (id: number) => invoke<void>("delete_project", { id }),
 
   // Add root from path (drag-drop)
   addRootFromPath: (path: string) =>

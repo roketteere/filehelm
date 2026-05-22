@@ -1,14 +1,48 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, FolderTree, Pin, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Code2,
+  Copy,
+  FolderOpen,
+  FolderTree,
+  ImagePlus,
+  Pin,
+  PinOff,
+  Play,
+  RefreshCcw,
+  Search,
+  Terminal,
+  Trash2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LanguageIcon } from "@/components/LanguageIcon";
 import { GitBadge } from "@/components/GitBadge";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { ipc } from "@/lib/ipc";
 import { splitWindowsPath } from "@/lib/path";
 import { prefs, type SortMode } from "@/lib/prefs";
 import { cn, formatRelative } from "@/lib/utils";
 import type { Project, Root } from "@/types";
+
+const ICON_OPTIONS = [
+  "rust", "node", "typescript", "javascript", "python", "go",
+  "java", "csharp", "ruby", "dart", "php", "elixir",
+  "tauri", "next", "react", "vue", "svelte", "astro",
+  "vite", "docker", "flutter",
+];
 
 interface Props {
   roots: Root[];
@@ -16,11 +50,20 @@ interface Props {
   selectedId: number | null;
   onSelect: (p: Project) => void;
   /** Trigger a project list refresh after sort_order changes from
-   *  drag-reorder. App.tsx provides refreshProjects(). */
+   *  drag-reorder or context-menu mutations. App.tsx provides
+   *  refreshProjects(). */
   onReorder?: () => Promise<void> | void;
+  onRootsChanged?: () => Promise<void> | void;
 }
 
-export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }: Props) {
+export function ProjectList({
+  roots,
+  projects,
+  selectedId,
+  onSelect,
+  onReorder,
+  onRootsChanged,
+}: Props) {
   const [query, setQuery] = useState("");
   const [manualCollapsed, setManualCollapsed] = useState<Record<number, boolean>>({});
   const [sortMode, setSortMode] = useState<SortMode>(prefs.sortMode());
@@ -134,14 +177,19 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
 
             return (
               <section key={root.id} className="mb-1">
-                <RootHeader
+                <RootContextMenu
                   root={root}
-                  total={total}
-                  visibleCount={items.length}
-                  collapsed={collapsed}
-                  onToggle={() => toggle(root.id)}
-                  isQueryActive={isQueryActive}
-                />
+                  onRefresh={() => onRootsChanged?.()}
+                >
+                  <RootHeader
+                    root={root}
+                    total={total}
+                    visibleCount={items.length}
+                    collapsed={collapsed}
+                    onToggle={() => toggle(root.id)}
+                    isQueryActive={isQueryActive}
+                  />
+                </RootContextMenu>
                 {!collapsed && (
                   <ul className="mt-0.5 space-y-0.5 pl-3 border-l border-border/60 ml-3">
                     {total === 0 ? (
@@ -155,6 +203,7 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
                         <li
                           key={p.id}
                           draggable={dragEnabled}
+                          {...{}}
                           onDragStart={(e) => {
                             e.dataTransfer.setData("text/plain", String(p.id));
                             e.dataTransfer.effectAllowed = "move";
@@ -195,12 +244,18 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
                               "before:absolute before:left-0 before:right-0 before:-top-0.5 before:h-0.5 before:rounded-full before:bg-primary before:shadow-[0_0_12px_hsl(var(--ring))]",
                           )}
                         >
-                          <ProjectRow
+                          <ProjectContextMenu
                             project={p}
-                            selected={selectedId === p.id}
-                            onClick={() => onSelect(p)}
-                            draggable={dragEnabled}
-                          />
+                            onSelect={() => onSelect(p)}
+                            onRefresh={() => onReorder?.()}
+                          >
+                            <ProjectRow
+                              project={p}
+                              selected={selectedId === p.id}
+                              onClick={() => onSelect(p)}
+                              draggable={dragEnabled}
+                            />
+                          </ProjectContextMenu>
                         </li>
                         );
                       })
@@ -283,6 +338,191 @@ function RootHeader({
 }
 
 // ---- single project row ---------------------------------------------------
+
+// ---- context menus ----
+
+function ProjectContextMenu({
+  project,
+  onSelect,
+  onRefresh,
+  children,
+}: {
+  project: Project;
+  onSelect: () => void;
+  onRefresh: () => void | Promise<void>;
+  children: React.ReactNode;
+}) {
+  const runPrimary = async () => {
+    try {
+      const actions = await ipc.projectActions(project.id);
+      const primary =
+        actions.find((a) => a.kind === "dev") ??
+        actions.find((a) => a.kind === "run") ??
+        actions[0];
+      if (primary) await ipc.runAction(primary.id);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const copyPath = () => {
+    navigator.clipboard.writeText(project.abs_path).catch(() => {});
+  };
+  const togglePinned = async () => {
+    try {
+      await ipc.setProjectPinned(project.id, !project.pinned);
+      await onRefresh();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const removeFromDb = async () => {
+    const ok = window.confirm(
+      `Remove "${project.name}" from the FileHelm database?\n\nThe folder on disk stays put. If the project is still under a scanned root, it will reappear on the next rescan — use this mainly to clear pinned/last-opened state.`,
+    );
+    if (!ok) return;
+    try {
+      await ipc.deleteProject(project.id);
+      await onRefresh();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const setIcon = async (slug: string | null) => {
+    try {
+      await ipc.setProjectIcon(project.id, slug);
+      await onRefresh();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild onContextMenu={() => onSelect()}>
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel>{project.name}</ContextMenuLabel>
+        <ContextMenuItem onSelect={runPrimary}>
+          <Play /> Run primary action
+          <ContextMenuShortcut>Enter</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => ipc.openInEditor(project.id).catch(() => {})}>
+          <Code2 /> Open in VS Code
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => ipc.openTerminalHere(project.id).catch(() => {})}>
+          <Terminal /> Open terminal here
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => ipc.openInExplorer(project.id).catch(() => {})}>
+          <FolderOpen /> Reveal in Explorer
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={copyPath}>
+          <Copy /> Copy path
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={togglePinned}>
+          {project.pinned ? <PinOff /> : <Pin />}
+          {project.pinned ? "Unpin" : "Pin"}
+        </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <ImagePlus /> Set icon…
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="grid w-72 grid-cols-6 gap-1 p-2">
+            {ICON_OPTIONS.map((slug) => (
+              <button
+                key={slug}
+                onClick={() => setIcon(slug)}
+                className={cn(
+                  "grid h-9 place-items-center rounded-md border border-border hover:border-primary",
+                  project.custom_icon_slug === slug && "border-primary ring-2 ring-primary/30",
+                )}
+                title={slug}
+              >
+                <LanguageIcon slug={slug} size={18} />
+              </button>
+            ))}
+            {project.custom_icon_slug && (
+              <button
+                className="col-span-6 mt-1 rounded px-2 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent"
+                onClick={() => setIcon(null)}
+              >
+                Reset to auto-detected
+              </button>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onSelect={() => ipc.rescanProject(project.id).then(() => onRefresh()).catch(() => {})}
+        >
+          <RefreshCcw /> Rescan
+        </ContextMenuItem>
+        <ContextMenuItem destructive onSelect={removeFromDb}>
+          <Trash2 /> Remove from FileHelm DB
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function RootContextMenu({
+  root,
+  onRefresh,
+  children,
+}: {
+  root: Root;
+  onRefresh: () => void | Promise<void>;
+  children: React.ReactNode;
+}) {
+  const rescan = async () => {
+    try {
+      await ipc.scanRoot(root.id);
+      await onRefresh();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const remove = async () => {
+    const ok = window.confirm(
+      `Remove root "${root.abs_path}" from FileHelm?\n\nThe folder on disk stays put — only the root registration and every project row under it are dropped.`,
+    );
+    if (!ok) return;
+    try {
+      await ipc.removeRoot(root.id);
+      await onRefresh();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel>{root.abs_path}</ContextMenuLabel>
+        <ContextMenuItem onSelect={rescan}>
+          <RefreshCcw /> Rescan now
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => ipc.revealPath(root.abs_path).catch(() => {})}
+        >
+          <FolderOpen /> Reveal in Explorer
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            navigator.clipboard.writeText(root.abs_path).catch(() => {});
+          }}
+        >
+          <Copy /> Copy path
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem destructive onSelect={remove}>
+          <Trash2 /> Remove root
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
 
 function sortProjects(projects: Project[], mode: SortMode): Project[] {
   const arr = projects.slice();

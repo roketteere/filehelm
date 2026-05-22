@@ -14,6 +14,15 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { invalidateGitBadge } from "@/components/GitBadge";
 import { ipc } from "@/lib/ipc";
 import { formatRelative, cn } from "@/lib/utils";
@@ -274,7 +283,13 @@ export function GitPanel({ projectId }: Props) {
               {commits.length === 0 ? (
                 <li className="text-xs text-muted-foreground">No commits.</li>
               ) : (
-                commits.map((c) => <CommitRow key={c.sha} commit={c} />)
+                commits.map((c) => (
+                  <CommitRow
+                    key={c.sha}
+                    commit={c}
+                    remoteUrl={info.remote_url}
+                  />
+                ))
               )}
             </ul>
           </ScrollArea>
@@ -343,21 +358,72 @@ function diffLineClass(line: string): string {
   return "";
 }
 
-function CommitRow({ commit }: { commit: GitCommit }) {
+function CommitRow({
+  commit,
+  remoteUrl,
+}: {
+  commit: GitCommit;
+  remoteUrl: string | null;
+}) {
+  // Build a GitHub commit URL if the remote looks like a github.com repo.
+  const githubUrl = (() => {
+    if (!remoteUrl) return null;
+    // git@github.com:owner/repo.git OR https://github.com/owner/repo(.git)
+    const m =
+      remoteUrl.match(/github\.com[:/]([^/]+)\/([^/.]+)(?:\.git)?\/?$/) ?? null;
+    if (!m) return null;
+    return `https://github.com/${m[1]}/${m[2]}/commit/${commit.sha}`;
+  })();
   return (
-    <li className="flex items-start gap-2.5 border-b border-border/50 py-1.5 last:border-0">
-      <GitCommitIcon className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/80")} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-[10px] text-muted-foreground">
-            {commit.short_sha}
-          </span>
-          <span className="truncate text-xs">{commit.subject}</span>
-        </div>
-        <div className="text-[10px] text-muted-foreground">
-          {commit.author} · {formatRelative(commit.date_iso)}
-        </div>
-      </div>
-    </li>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <li className="flex items-start gap-2.5 border-b border-border/50 py-1.5 last:border-0">
+          <GitCommitIcon className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/80")} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {commit.short_sha}
+              </span>
+              <span className="truncate text-xs">{commit.subject}</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              {commit.author} · {formatRelative(commit.date_iso)}
+            </div>
+          </div>
+        </li>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel className="truncate">{commit.short_sha} · {commit.subject}</ContextMenuLabel>
+        <ContextMenuItem
+          onSelect={() => {
+            navigator.clipboard.writeText(commit.sha).catch(() => {});
+          }}
+        >
+          Copy SHA
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            navigator.clipboard.writeText(commit.short_sha).catch(() => {});
+          }}
+        >
+          Copy short SHA
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            navigator.clipboard.writeText(commit.subject).catch(() => {});
+          }}
+        >
+          Copy subject
+        </ContextMenuItem>
+        {githubUrl && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => openUrl(githubUrl).catch(() => {})}>
+              Open on GitHub
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

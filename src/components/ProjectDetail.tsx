@@ -26,6 +26,15 @@ import { MarkdownPreview } from "@/components/MarkdownPreview";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { GitPanel } from "@/components/GitPanel";
 import { IconOverridePopover } from "@/components/IconOverridePopover";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 // Lazy chunks — heavy or on-demand-only components keep the main
@@ -470,6 +479,8 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                     const isRunning = running.has(a.id);
                     return (
                     <li key={a.id}>
+                      <ContextMenu>
+                        <ContextMenuTrigger asChild>
                       <button
                         onClick={() => runAction(a)}
                         title={isRunning ? "Click to stop (force kill)" : "Click to run"}
@@ -513,6 +524,85 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                           <Play className="h-4 w-4 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
                         )}
                       </button>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuLabel className="truncate">{a.label}</ContextMenuLabel>
+                          <ContextMenuItem onSelect={() => runAction(a)}>
+                            {isRunning ? "Stop" : "Run"}
+                            <ContextMenuShortcut>Enter</ContextMenuShortcut>
+                          </ContextMenuItem>
+                          {!isRunning && (
+                            <ContextMenuItem
+                              onSelect={async () => {
+                                // One-off override: launch in embedded mode
+                                // regardless of the user's persisted toggle.
+                                try {
+                                  const sessionId = `embed-${a.id}-${Date.now()}`;
+                                  await ipc.runActionEmbedded(a.id, sessionId, 24, 100);
+                                  setEmbeddedSession({
+                                    id: sessionId,
+                                    command: a.command,
+                                    cwd: a.working_dir ?? project.abs_path,
+                                    actionId: a.id,
+                                  });
+                                  setRunning((prev) => new Set(prev).add(a.id));
+                                } catch (e) {
+                                  setError(String(e));
+                                }
+                              }}
+                            >
+                              Run in embedded terminal
+                            </ContextMenuItem>
+                          )}
+                          <ContextMenuSeparator />
+                          <ContextMenuItem onSelect={() => setEditorOpen(true)}>
+                            Edit actions…
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onSelect={async () => {
+                              try {
+                                await ipc.upsertAction({
+                                  project_id: project.id,
+                                  label: `${a.label} (copy)`,
+                                  command: a.command,
+                                  working_dir: a.working_dir ?? null,
+                                  kind: a.kind,
+                                });
+                                await reloadActions();
+                              } catch (e) {
+                                setError(String(e));
+                              }
+                            }}
+                          >
+                            Duplicate
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onSelect={() => {
+                              navigator.clipboard.writeText(a.command).catch(() => {});
+                            }}
+                          >
+                            Copy command
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            destructive
+                            onSelect={async () => {
+                              const ok = window.confirm(
+                                `Delete action "${a.label}"?\n\nIt may reappear on the next rescan unless it's a user-override.`,
+                              );
+                              if (!ok) return;
+                              try {
+                                await ipc.deleteAction(a.id);
+                                await reloadActions();
+                              } catch (e) {
+                                setError(String(e));
+                              }
+                            }}
+                          >
+                            Delete action
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     </li>
                     );
                   })}

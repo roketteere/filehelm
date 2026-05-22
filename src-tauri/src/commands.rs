@@ -503,6 +503,32 @@ pub struct RunHistoryRow {
 }
 
 #[tauri::command]
+pub async fn delete_run_history(id: i64) -> AppResult<()> {
+    sqlx::query("DELETE FROM run_history WHERE id = ?")
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn clear_run_history() -> AppResult<u64> {
+    let res = sqlx::query("DELETE FROM run_history")
+        .execute(&state().db)
+        .await?;
+    Ok(res.rows_affected())
+}
+
+#[tauri::command]
+pub async fn delete_project(id: i64) -> AppResult<()> {
+    sqlx::query("DELETE FROM projects WHERE id = ?")
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn list_run_history(limit: u32) -> AppResult<Vec<RunHistoryRow>> {
     let lim = if limit == 0 { 50 } else { limit as i64 };
     let rows = sqlx::query_as::<_, RunHistoryRow>(
