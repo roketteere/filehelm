@@ -7,6 +7,7 @@ import {
   PinOff,
   Play,
   RefreshCcw,
+  Square,
   Terminal,
   Hammer,
   FlaskConical,
@@ -14,6 +15,7 @@ import {
   Wand2,
   Paintbrush,
 } from "lucide-react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -64,7 +66,11 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
     id: string;
     command: string;
     cwd: string;
+    actionId: number;
   } | null>(null);
+  // Action ids currently running embedded (Set so we can extend to
+  // multiple sessions later). Single-session today.
+  const [running, setRunning] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -104,12 +110,40 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
     }
   };
 
+  const stopRunning = async () => {
+    if (!embeddedSession) return;
+    try {
+      await ipc.ptyKill(embeddedSession.id);
+    } catch {
+      // session may already be gone
+    }
+    setRunning((prev) => {
+      const next = new Set(prev);
+      next.delete(embeddedSession.actionId);
+      return next;
+    });
+    setEmbeddedSession(null);
+  };
+
   const runAction = async (a: ProjectAction) => {
     setError(null);
+    // Click on a card that's already running → stop instead of restart.
+    if (running.has(a.id)) {
+      await stopRunning();
+      return;
+    }
     try {
       if (prefs.embeddedRunner()) {
-        // Pop the embedded terminal panel and let it spawn via
-        // run_action_embedded (which logs history + bumps last_opened).
+        // If a different action is currently running embedded, kill
+        // it first — single-session model.
+        if (embeddedSession) {
+          await ipc.ptyKill(embeddedSession.id).catch(() => {});
+          setRunning((prev) => {
+            const next = new Set(prev);
+            next.delete(embeddedSession.actionId);
+            return next;
+          });
+        }
         const sessionId = `embed-${a.id}-${Date.now()}`;
         const cols = 100;
         const rows = 24;
@@ -118,14 +152,46 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
           id: sessionId,
           command: a.command,
           cwd: a.working_dir ?? project.abs_path,
+          actionId: a.id,
         });
+        setRunning((prev) => new Set(prev).add(a.id));
       } else {
+        // External Windows Terminal: fire-and-forget. We can't track
+        // or kill these once spawned (Windows Terminal owns the
+        // lifecycle). Close the terminal window manually to stop.
         await ipc.runAction(a.id);
       }
     } catch (e) {
       setError(`Run failed: ${e}`);
     }
   };
+
+  // Watch for PTY exit events globally so the action card flips back
+  // to its Play state when the process ends on its own.
+  useEffect(() => {
+    if (!embeddedSession) return;
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      try {
+        const webview = getCurrentWebview();
+        unlisten = await webview.listen(
+          `filehelm:pty-exit:${embeddedSession.id}`,
+          () => {
+            setRunning((prev) => {
+              const next = new Set(prev);
+              next.delete(embeddedSession.actionId);
+              return next;
+            });
+          },
+        );
+      } catch {
+        // not in Tauri
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [embeddedSession]);
 
   const rescan = async () => {
     setLoading(true);
@@ -304,23 +370,38 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                 </div>
               ) : (
                 <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {actions.map((a) => (
+                  {actions.map((a) => {
+                    const isRunning = running.has(a.id);
+                    return (
                     <li key={a.id}>
                       <button
                         onClick={() => runAction(a)}
-                        className="group flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-all hover:border-primary/60 hover:shadow-[0_0_0_1px_hsl(var(--ring)/0.25)]"
+                        title={isRunning ? "Click to stop (force kill)" : "Click to run"}
+                        className={cn(
+                          "group flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-all hover:shadow-[0_0_0_1px_hsl(var(--ring)/0.25)]",
+                          isRunning
+                            ? "border-emerald-500/60 ring-1 ring-emerald-500/30"
+                            : "border-border hover:border-primary/60",
+                        )}
                       >
                         <span className={cn(
                           "grid h-9 w-9 place-items-center rounded-md",
-                          kindColor(a.kind),
+                          isRunning
+                            ? "bg-emerald-500/15 text-emerald-300 animate-subtle-pulse"
+                            : kindColor(a.kind),
                         )}>
-                          {iconForKind(a.kind)}
+                          {isRunning ? <Square className="h-4 w-4 fill-current" /> : iconForKind(a.kind)}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="truncate text-sm font-medium">{a.label}</span>
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              {a.kind}
+                            <span className={cn(
+                              "rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
+                              isRunning
+                                ? "bg-emerald-500/20 text-emerald-300"
+                                : "bg-muted text-muted-foreground",
+                            )}>
+                              {isRunning ? "running" : a.kind}
                             </span>
                           </div>
                           <div className="truncate font-mono text-[11px] text-muted-foreground">
@@ -330,10 +411,15 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                             from {a.source}
                           </div>
                         </div>
-                        <Play className="h-4 w-4 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
+                        {isRunning ? (
+                          <Square className="h-4 w-4 shrink-0 fill-current text-emerald-300" />
+                        ) : (
+                          <Play className="h-4 w-4 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
+                        )}
                       </button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
               <div className="mt-6 text-xs text-muted-foreground">
@@ -385,9 +471,30 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
             <span className="font-mono text-muted-foreground">▶ {embeddedSession.command}</span>
             <span className="ml-auto text-[10px] text-muted-foreground">{embeddedSession.cwd}</span>
             <button
+              className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-amber-200 hover:bg-amber-500/30"
+              title="Send Ctrl+C (soft stop)"
+              onClick={() => {
+                ipc.ptyWrite(embeddedSession.id, "").catch(() => {});
+              }}
+            >
+              Ctrl+C
+            </button>
+            <button
+              className="inline-flex items-center gap-1 rounded bg-destructive/20 px-2 py-0.5 text-destructive-foreground hover:bg-destructive/30"
+              title="Force kill the process"
+              onClick={() => stopRunning()}
+            >
+              <Square className="h-3 w-3 fill-current" /> Kill
+            </button>
+            <button
               className="rounded px-2 py-0.5 hover:bg-accent"
               onClick={() => {
                 ipc.ptyKill(embeddedSession.id).catch(() => {});
+                setRunning((prev) => {
+                  const next = new Set(prev);
+                  next.delete(embeddedSession.actionId);
+                  return next;
+                });
                 setEmbeddedSession(null);
               }}
             >
