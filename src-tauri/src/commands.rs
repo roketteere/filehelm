@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::clone;
 use crate::error::{AppError, AppResult};
+use crate::git;
 use crate::runner;
 use crate::scanner;
 use crate::state;
@@ -373,6 +374,94 @@ pub async fn open_in_explorer(project_id: i64) -> AppResult<()> {
 pub async fn reveal_path(path: String) -> AppResult<()> {
     runner::reveal_in_explorer(Path::new(&path))?;
     Ok(())
+}
+
+// ---------- Git surface (Phase 2.0) ----------
+
+async fn project_path(id: i64) -> AppResult<PathBuf> {
+    let s: String = sqlx::query_scalar("SELECT abs_path FROM projects WHERE id = ?")
+        .bind(id)
+        .fetch_one(&state().db)
+        .await?;
+    Ok(PathBuf::from(s))
+}
+
+#[tauri::command]
+pub async fn project_git_info(id: i64) -> AppResult<Option<git::GitInfo>> {
+    let p = project_path(id).await?;
+    git::info(&p)
+}
+
+#[tauri::command]
+pub async fn project_recent_commits(id: i64, limit: u32) -> AppResult<Vec<git::GitCommit>> {
+    let p = project_path(id).await?;
+    git::recent_commits(&p, if limit == 0 { 20 } else { limit })
+}
+
+#[tauri::command]
+pub async fn project_git_pull(id: i64) -> AppResult<git::GitOutcome> {
+    let p = project_path(id).await?;
+    git::pull(&p)
+}
+
+#[tauri::command]
+pub async fn project_git_fetch(id: i64) -> AppResult<git::GitOutcome> {
+    let p = project_path(id).await?;
+    git::fetch(&p)
+}
+
+#[tauri::command]
+pub async fn project_git_status(id: i64) -> AppResult<String> {
+    let p = project_path(id).await?;
+    git::status_text(&p)
+}
+
+// ---------- Pin / unpin (Phase 2.1) ----------
+
+#[tauri::command]
+pub async fn set_project_pinned(id: i64, pinned: bool) -> AppResult<()> {
+    sqlx::query("UPDATE projects SET pinned = ? WHERE id = ?")
+        .bind(pinned)
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
+// ---------- Run history (Phase 2.1) ----------
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct RunHistoryRow {
+    pub id: i64,
+    pub project_id: i64,
+    pub project_name: String,
+    pub command: String,
+    pub started_at: chrono::NaiveDateTime,
+    pub exit_code: Option<i64>,
+    pub duration_ms: Option<i64>,
+}
+
+#[tauri::command]
+pub async fn list_run_history(limit: u32) -> AppResult<Vec<RunHistoryRow>> {
+    let lim = if limit == 0 { 50 } else { limit as i64 };
+    let rows = sqlx::query_as::<_, RunHistoryRow>(
+        "SELECT rh.id, rh.project_id, p.name as project_name, rh.command, \
+                rh.started_at, rh.exit_code, rh.duration_ms \
+         FROM run_history rh \
+         JOIN projects p ON p.id = rh.project_id \
+         ORDER BY rh.started_at DESC LIMIT ?",
+    )
+    .bind(lim)
+    .fetch_all(&state().db)
+    .await?;
+    Ok(rows)
+}
+
+// ---------- Add root from a path string (drag-drop) ----------
+
+#[tauri::command]
+pub async fn add_root_from_path(path: String) -> AppResult<RootRow> {
+    add_root(AddRootArgs { path, label: None }).await
 }
 
 // ---------- GitHub clone & import ----------

@@ -4,6 +4,7 @@ mod clone;
 mod commands;
 mod db;
 mod error;
+mod git;
 mod runner;
 mod scanner;
 mod tray;
@@ -79,6 +80,14 @@ pub fn run() {
             commands::open_in_explorer,
             commands::reveal_path,
             commands::clone_repo,
+            commands::project_git_info,
+            commands::project_recent_commits,
+            commands::project_git_pull,
+            commands::project_git_fetch,
+            commands::project_git_status,
+            commands::set_project_pinned,
+            commands::list_run_history,
+            commands::add_root_from_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");

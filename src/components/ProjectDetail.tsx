@@ -19,6 +19,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { LanguageIcon } from "@/components/LanguageIcon";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { GitPanel } from "@/components/GitPanel";
 import { ipc } from "@/lib/ipc";
 import { cn, formatRelative } from "@/lib/utils";
 import { labelFor } from "@/lib/devicon-map";
@@ -186,6 +187,7 @@ export function ProjectDetail({ project, onRescanned }: Props) {
               Actions {actions.length > 0 && <span className="ml-1 text-muted-foreground">({actions.length})</span>}
             </TabsTrigger>
             <TabsTrigger value="readme">README</TabsTrigger>
+            <TabsTrigger value="git">Git</TabsTrigger>
           </TabsList>
         </div>
 
@@ -244,6 +246,10 @@ export function ProjectDetail({ project, onRescanned }: Props) {
 
         <TabsContent value="readme" className="m-0 flex-1 overflow-hidden">
           <MarkdownPreview source={readme} />
+        </TabsContent>
+
+        <TabsContent value="git" className="m-0 flex-1 overflow-hidden">
+          <GitPanel projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>

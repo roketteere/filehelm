@@ -1,9 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   CloneResult,
+  GitCommit,
+  GitInfo,
+  GitOutcome,
   Project,
   ProjectAction,
   Root,
+  RunHistoryRow,
   ScanReport,
 } from "@/types";
 
@@ -41,4 +45,24 @@ export const ipc = {
   // GitHub clone & import
   cloneRepo: (url: string, dest: string) =>
     invoke<CloneResult>("clone_repo", { args: { url, dest } }),
+
+  // Git surface (Phase 2.0)
+  projectGitInfo: (id: number) => invoke<GitInfo | null>("project_git_info", { id }),
+  projectRecentCommits: (id: number, limit = 20) =>
+    invoke<GitCommit[]>("project_recent_commits", { id, limit }),
+  projectGitPull: (id: number) => invoke<GitOutcome>("project_git_pull", { id }),
+  projectGitFetch: (id: number) => invoke<GitOutcome>("project_git_fetch", { id }),
+  projectGitStatus: (id: number) => invoke<string>("project_git_status", { id }),
+
+  // Pin / unpin
+  setProjectPinned: (id: number, pinned: boolean) =>
+    invoke<void>("set_project_pinned", { id, pinned }),
+
+  // Run history
+  listRunHistory: (limit = 50) =>
+    invoke<RunHistoryRow[]>("list_run_history", { limit }),
+
+  // Add root from path (drag-drop)
+  addRootFromPath: (path: string) =>
+    invoke<Root>("add_root_from_path", { path }),
 };

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, FolderTree, Pin, Search } from "lucide-react
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LanguageIcon } from "@/components/LanguageIcon";
+import { GitBadge } from "@/components/GitBadge";
 import { splitWindowsPath } from "@/lib/path";
 import { cn, formatRelative } from "@/lib/utils";
 import type { Project, Root } from "@/types";
@@ -261,15 +262,18 @@ function ProjectRow({
             <Pin className="h-3 w-3 text-primary" aria-label="pinned" />
           )}
         </div>
-        <div className="truncate text-[10px] text-muted-foreground">
-          {project.last_opened_at
-            ? `opened ${formatRelative(project.last_opened_at)}`
-            : project.badges.length > 0
-              ? project.badges
-                  .slice(0, 4)
-                  .map((b) => b.value)
-                  .join(" · ")
-              : "—"}
+        <div className="flex items-center gap-1.5 truncate text-[10px] text-muted-foreground">
+          <span className="truncate">
+            {project.last_opened_at
+              ? `opened ${formatRelative(project.last_opened_at)}`
+              : project.badges.length > 0
+                ? project.badges
+                    .slice(0, 4)
+                    .map((b) => b.value)
+                    .join(" · ")
+                : "—"}
+          </span>
+          <GitBadge projectId={project.id} compact className="ml-auto" />
         </div>
       </div>
     </button>
