@@ -184,15 +184,26 @@ pub async fn scan_root(root_id: i64) -> AppResult<ScanReport> {
         .await?;
 
     let path = PathBuf::from(&root.abs_path);
+    tracing::info!(root_id, root_path = %path.display(), "scan_root: starting filesystem walk");
     let projects = scanner::scan_root(&path)?;
+    tracing::info!(root_id, count = projects.len(), "scan_root: walk produced N projects, beginning upsert loop");
     let mut report = ScanReport::default();
 
     // Track which abs_paths still exist so we can prune missing ones.
     let mut seen_paths: Vec<String> = Vec::with_capacity(projects.len());
 
-    for p in projects {
+    for (idx, p) in projects.iter().enumerate() {
+        // Per-project trace so a panic mid-loop tells us exactly which
+        // project blew up. Without this, a crash in upsert_project is
+        // diagnosable only from the panic hook's backtrace.
+        tracing::debug!(
+            idx,
+            total = projects.len(),
+            project = %p.abs_path,
+            "scan_root: upserting project"
+        );
         seen_paths.push(p.abs_path.clone());
-        match upsert_project(root_id, &p).await {
+        match upsert_project(root_id, p).await {
             Ok(UpsertOutcome::Added) => report.added += 1,
             Ok(UpsertOutcome::Updated) => report.updated += 1,
             Ok(UpsertOutcome::Unchanged) => report.unchanged += 1,
@@ -202,6 +213,14 @@ pub async fn scan_root(root_id: i64) -> AppResult<ScanReport> {
             }
         }
     }
+    tracing::info!(
+        root_id,
+        added = report.added,
+        updated = report.updated,
+        unchanged = report.unchanged,
+        errors = report.errors.len(),
+        "scan_root: upsert loop finished"
+    );
 
     // Prune projects that were under this root but no longer exist.
     if seen_paths.is_empty() {

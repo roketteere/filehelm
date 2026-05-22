@@ -41,6 +41,8 @@ pub fn run() {
         )
         .init();
 
+    install_panic_logger();
+
     let mut builder = tauri::Builder::default();
 
     // Single-instance MUST register before any other plugin so the
@@ -227,4 +229,54 @@ pub fn state() -> &'static AppState {
 fn filehelm_data_dir() -> anyhow::Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
     Ok(home.join(".filehelm"))
+}
+
+/// Install a panic hook that writes panic details to
+/// `~/.filehelm/last-panic.log` before unwinding / aborting. Critical
+/// for release builds where stderr is detached from the parent
+/// console — without this, a panic shows up as a generic Windows
+/// "fault offset 0x..." event-log entry and the actual message is
+/// gone. The hook chains to the default behavior so dev console
+/// output still works.
+fn install_panic_logger() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // Best-effort log file write. If anything in here panics or
+        // fails, we still call the default hook so the user gets
+        // *some* signal.
+        let _ = (|| -> std::io::Result<()> {
+            use std::io::Write;
+            let dir = dirs::home_dir()
+                .ok_or_else(|| std::io::Error::other("no home dir"))?
+                .join(".filehelm");
+            std::fs::create_dir_all(&dir)?;
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join("last-panic.log"))?;
+            let now = chrono::Utc::now().to_rfc3339();
+            let location = info
+                .location()
+                .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+                .unwrap_or_else(|| "<unknown>".to_string());
+            let payload = info
+                .payload()
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| {
+                    info.payload()
+                        .downcast_ref::<String>()
+                        .map(String::as_str)
+                })
+                .unwrap_or("<unprintable payload>");
+            writeln!(
+                f,
+                "\n=== panic @ {now} ===\nthread: {thread:?}\nlocation: {location}\nmessage: {payload}\nbacktrace:\n{bt:?}",
+                thread = std::thread::current().name(),
+                bt = std::backtrace::Backtrace::force_capture(),
+            )?;
+            Ok(())
+        })();
+        default_hook(info);
+    }));
 }

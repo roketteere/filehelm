@@ -1,7 +1,7 @@
 {
   "name": "filehelm",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "Local desktop launcher + dual-pane file commander for dev projects",
   "author": "Joel Perez (@roketteere) <jxp489@gmail.com>",

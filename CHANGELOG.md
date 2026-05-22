@@ -11,6 +11,21 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 
 (nothing yet)
 
+## [0.2.3] — 2026-05-22
+
+### Added
+
+- **Panic logger** writes any process-level Rust panic to
+  `~/.filehelm/last-panic.log` (rolling append) with thread,
+  source location, message, and backtrace before the default
+  abort hook runs. Critical for release builds where stderr is
+  detached and the crash otherwise shows only as a generic
+  Windows event-log "fault offset 0x..." entry.
+- **Per-project scan tracing** — `scan_root` now emits a debug
+  line per upsert (project path + 1-based index) so any
+  scan-time panic is diagnosable from the log even without the
+  panic-logger output.
+
 ## [0.2.2] — 2026-05-22
 
 ### Fixed
@@ -190,7 +205,8 @@ Highlights:
 - OS-global hotkey + Tauri auto-updater scaffold
 - Norton-style dual-pane file commander (MVP) + toolbar upgrades
 
-[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.2...HEAD
+[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.3...HEAD
+[0.2.3]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.3
 [0.2.2]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.2
 [0.2.1]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.1
 [0.2.0]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.0
