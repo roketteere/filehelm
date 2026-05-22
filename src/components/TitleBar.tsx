@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Anchor } from "lucide-react";
+import { Anchor, Folder, FolderTree } from "lucide-react";
 import { isMacOS } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
@@ -13,8 +13,17 @@ import { cn } from "@/lib/utils";
 // glyph style (red/yellow/green dots). On Windows + Linux they stay on
 // the right with the existing svg glyphs. The change is purely visual
 // — handlers + drag region behave identically across all three OSes.
+//
+// The brand block now carries the project + root stats so the App's
+// inline header doesn't have to repeat them (and doesn't have to
+// repeat the logo + "FileHelm" string either — one source of truth).
 
-export function TitleBar() {
+interface TitleBarProps {
+  projectCount: number;
+  rootCount: number;
+}
+
+export function TitleBar({ projectCount, rootCount }: TitleBarProps) {
   const [maximized, setMaximized] = useState(false);
   const macOS = isMacOS();
 
@@ -98,9 +107,39 @@ export function TitleBar() {
       </span>
       <span
         data-tauri-drag-region
-        className="text-[10px] uppercase tracking-widest text-muted-foreground"
+        className="text-[10px] text-muted-foreground"
       >
-        — project helm
+        — Project Manager —
+      </span>
+      <span
+        data-tauri-drag-region
+        className="inline-flex items-center gap-1 text-[11px]"
+      >
+        <Folder className="h-3 w-3 shrink-0 text-sky-400" />
+        <span className="font-semibold tabular-nums text-sky-300">
+          {projectCount}
+        </span>
+        <span className="text-muted-foreground">
+          project{projectCount === 1 ? "" : "s"}
+        </span>
+      </span>
+      <span
+        data-tauri-drag-region
+        className="text-muted-foreground/40"
+      >
+        ·
+      </span>
+      <span
+        data-tauri-drag-region
+        className="inline-flex items-center gap-1 text-[11px]"
+      >
+        <FolderTree className="h-3 w-3 shrink-0 fill-rose-500/20 text-rose-400" />
+        <span className="font-semibold tabular-nums text-rose-300">
+          {rootCount}
+        </span>
+        <span className="text-muted-foreground">
+          root{rootCount === 1 ? "" : "s"}
+        </span>
       </span>
       <div data-tauri-drag-region className="flex-1" />
       {!macOS && controls}

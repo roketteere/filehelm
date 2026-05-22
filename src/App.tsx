@@ -1,7 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FolderCog, Github, RefreshCcw, Loader2, Anchor, Settings, Files } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProjectList } from "@/components/ProjectList";
 import { ProjectDetail } from "@/components/ProjectDetail";
@@ -332,10 +331,12 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={250}>
       <div className="flex h-full flex-col bg-background">
-        <TitleBar />
+        <TitleBar
+          projectCount={projects.length}
+          rootCount={roots.length}
+        />
         <Header
           rootsCount={roots.length}
-          projectCount={projects.length}
           scanning={scanning}
           scanProgress={scanProgress}
           onScanAll={scanAll}
@@ -456,7 +457,6 @@ export default function App() {
 
 function Header({
   rootsCount,
-  projectCount,
   scanning,
   scanProgress,
   onScanAll,
@@ -468,7 +468,6 @@ function Header({
   onThemeOpenChange,
 }: {
   rootsCount: number;
-  projectCount: number;
   scanning: boolean;
   scanProgress: { current: string; index: number; total: number } | null;
   onScanAll: () => void;
@@ -480,23 +479,7 @@ function Header({
   onThemeOpenChange: (v: boolean) => void;
 }) {
   return (
-    <header className="flex h-12 items-center justify-between border-b border-border bg-card/70 px-4 backdrop-blur">
-      <div className="flex items-center gap-2.5">
-        <span className="grid h-7 w-7 place-items-center rounded-md bg-gradient-to-br from-primary to-primary/50 text-primary-foreground shadow-[0_0_24px_-4px_hsl(var(--ring)/0.5)]">
-          <Anchor className="h-4 w-4" />
-        </span>
-        <div className="leading-tight">
-          <div className="text-sm font-semibold tracking-tight">FileHelm</div>
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            project launcher
-          </div>
-        </div>
-        <Separator orientation="vertical" className="mx-2 h-6" />
-        <div className="text-xs text-muted-foreground">
-          {projectCount} project{projectCount === 1 ? "" : "s"} · {rootsCount} root
-          {rootsCount === 1 ? "" : "s"}
-        </div>
-      </div>
+    <header className="flex h-12 items-center justify-end border-b border-border bg-card/70 px-4 backdrop-blur">
       <div className="flex items-center gap-2">
         <SortPicker />
         <ThemePicker open={themeOpen} onOpenChange={onThemeOpenChange} />

@@ -154,25 +154,6 @@ export function ProjectList({
         />
       </div>
 
-      {(roots.length > 0 || projects.length > 0) && (
-        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px]">
-          <Folder className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-          <span className="font-semibold tabular-nums text-sky-300">
-            {projects.length}
-          </span>
-          <span className="text-muted-foreground">
-            project{projects.length === 1 ? "" : "s"}
-          </span>
-          <span className="text-muted-foreground/40">·</span>
-          <FolderTree className="h-3.5 w-3.5 shrink-0 text-rose-400" />
-          <span className="font-semibold tabular-nums text-rose-300">
-            {roots.length}
-          </span>
-          <span className="text-muted-foreground">
-            root{roots.length === 1 ? "" : "s"}
-          </span>
-        </div>
-      )}
 
       <ScrollArea className="mt-2 flex-1">
         {/* Extra pr-3 so row content (especially the right-side
