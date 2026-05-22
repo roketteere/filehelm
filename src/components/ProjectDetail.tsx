@@ -26,8 +26,10 @@ import { GitPanel } from "@/components/GitPanel";
 import { StatsPanel } from "@/components/StatsPanel";
 import { IconOverridePopover } from "@/components/IconOverridePopover";
 import { ActionEditor } from "@/components/ActionEditor";
+import { EmbeddedTerminal } from "@/components/EmbeddedTerminal";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ipc } from "@/lib/ipc";
+import { prefs } from "@/lib/prefs";
 import { cn, formatRelative } from "@/lib/utils";
 import { labelFor } from "@/lib/devicon-map";
 import type { DetectedUrl, Project, ProjectAction } from "@/types";
@@ -46,6 +48,11 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [embeddedSession, setEmbeddedSession] = useState<{
+    id: string;
+    command: string;
+    cwd: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +95,21 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
   const runAction = async (a: ProjectAction) => {
     setError(null);
     try {
-      await ipc.runAction(a.id);
+      if (prefs.embeddedRunner()) {
+        // Pop the embedded terminal panel and let it spawn via
+        // run_action_embedded (which logs history + bumps last_opened).
+        const sessionId = `embed-${a.id}-${Date.now()}`;
+        const cols = 100;
+        const rows = 24;
+        await ipc.runActionEmbedded(a.id, sessionId, rows, cols);
+        setEmbeddedSession({
+          id: sessionId,
+          command: a.command,
+          cwd: a.working_dir ?? project.abs_path,
+        });
+      } else {
+        await ipc.runAction(a.id);
+      }
     } catch (e) {
       setError(`Run failed: ${e}`);
     }
@@ -339,6 +360,34 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
         actions={actions}
         onChanged={reloadActions}
       />
+
+      {embeddedSession && (
+        <div className="fixed inset-x-0 bottom-0 z-30 flex h-72 flex-col border-t border-primary/40 bg-background shadow-2xl">
+          <div className="flex items-center gap-2 border-b border-border bg-card/60 px-3 py-1.5 text-xs">
+            <span className="font-mono text-muted-foreground">▶ {embeddedSession.command}</span>
+            <span className="ml-auto text-[10px] text-muted-foreground">{embeddedSession.cwd}</span>
+            <button
+              className="rounded px-2 py-0.5 hover:bg-accent"
+              onClick={() => {
+                ipc.ptyKill(embeddedSession.id).catch(() => {});
+                setEmbeddedSession(null);
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <EmbeddedTerminal
+              sessionId={embeddedSession.id}
+              cwd={embeddedSession.cwd}
+              command={embeddedSession.command}
+              onExit={() => {
+                /* keep panel open so user can read the final output */
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

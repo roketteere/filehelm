@@ -97,6 +97,13 @@ function GeneralTab() {
   const [saved, setSaved] = useState<"none" | "ok">("none");
   const [resetting, setResetting] = useState(false);
   const [closeToTray, setCloseToTrayState] = useState(prefs.closeToTray());
+  const [embeddedRunner, setEmbeddedRunnerState] = useState(prefs.embeddedRunner());
+
+  const toggleEmbeddedRunner = () => {
+    const next = !embeddedRunner;
+    setEmbeddedRunnerState(next);
+    prefs.setEmbeddedRunner(next);
+  };
 
   const toggleCloseToTray = async () => {
     const next = !closeToTray;
@@ -137,21 +144,16 @@ function GeneralTab() {
         title="Close-to-tray"
         description="When the X button is pressed, hide FileHelm to the system tray rather than quit. Use the tray's Quit menu to actually exit when this is on."
       >
-        <button
-          onClick={toggleCloseToTray}
-          className={cn(
-            "relative h-5 w-9 rounded-full transition-colors",
-            closeToTray ? "bg-primary" : "bg-muted",
-          )}
-          aria-label={closeToTray ? "Disable close-to-tray" : "Enable close-to-tray"}
-        >
-          <span
-            className={cn(
-              "absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-all",
-              closeToTray ? "left-[1.125rem]" : "left-0.5",
-            )}
-          />
-        </button>
+        <Toggle on={closeToTray} onChange={toggleCloseToTray} />
+      </Row>
+
+      <Separator />
+
+      <Row
+        title="Embedded terminal runner"
+        description="When on, clicking an action runs it in an in-app xterm.js panel via ConPTY instead of spawning a Windows Terminal window. External terminal is faster for one-shots; embedded is better when you want output in-line."
+      >
+        <Toggle on={embeddedRunner} onChange={toggleEmbeddedRunner} />
       </Row>
 
       <Separator />
@@ -317,6 +319,26 @@ function Row({
       </div>
       <div className="shrink-0">{children}</div>
     </div>
+  );
+}
+
+function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      className={cn(
+        "relative h-5 w-9 rounded-full transition-colors",
+        on ? "bg-primary" : "bg-muted",
+      )}
+      aria-label="Toggle"
+    >
+      <span
+        className={cn(
+          "absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-all",
+          on ? "left-[1.125rem]" : "left-0.5",
+        )}
+      />
+    </button>
   );
 }
 

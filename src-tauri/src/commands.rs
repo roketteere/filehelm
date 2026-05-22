@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::clone;
 use crate::error::{AppError, AppResult};
 use crate::git;
+use crate::pty;
 use crate::runner;
 use crate::scanner;
 use crate::search;
@@ -816,6 +817,74 @@ pub async fn upsert_action(args: UpsertActionArgs) -> AppResult<i64> {
 pub async fn delete_action(id: i64) -> AppResult<()> {
     sqlx::query("DELETE FROM project_actions WHERE id = ?")
         .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
+// ---------- Embedded PTY runner ----------
+
+#[derive(Deserialize)]
+pub struct PtySpawnArgs {
+    pub session_id: String,
+    pub cwd: String,
+    pub command: String,
+    pub rows: u16,
+    pub cols: u16,
+}
+
+#[tauri::command]
+pub async fn pty_spawn(args: PtySpawnArgs, app: tauri::AppHandle) -> AppResult<()> {
+    pty::spawn(app, args.session_id, args.cwd, args.command, args.rows, args.cols)
+}
+
+#[tauri::command]
+pub async fn pty_write(session_id: String, data: String) -> AppResult<()> {
+    pty::write(&session_id, &data)
+}
+
+#[tauri::command]
+pub async fn pty_resize(session_id: String, rows: u16, cols: u16) -> AppResult<()> {
+    pty::resize(&session_id, rows, cols)
+}
+
+#[tauri::command]
+pub async fn pty_kill(session_id: String) -> AppResult<()> {
+    pty::kill(&session_id)
+}
+
+#[tauri::command]
+pub async fn run_action_embedded(
+    action_id: i64,
+    session_id: String,
+    rows: u16,
+    cols: u16,
+    app: tauri::AppHandle,
+) -> AppResult<()> {
+    let row: ActionRow = sqlx::query_as(
+        "SELECT id, project_id, label, command, working_dir, source, kind, is_user_override, sort_order \
+         FROM project_actions WHERE id = ?",
+    )
+    .bind(action_id)
+    .fetch_one(&state().db)
+    .await?;
+    let wd_string: String = if let Some(s) = row.working_dir.clone() {
+        s
+    } else {
+        sqlx::query_scalar("SELECT abs_path FROM projects WHERE id = ?")
+            .bind(row.project_id)
+            .fetch_one(&state().db)
+            .await?
+    };
+    pty::spawn(app, session_id, wd_string, row.command.clone(), rows, cols)?;
+    sqlx::query("INSERT INTO run_history (project_id, action_id, command) VALUES (?, ?, ?)")
+        .bind(row.project_id)
+        .bind(row.id)
+        .bind(&row.command)
+        .execute(&state().db)
+        .await?;
+    sqlx::query("UPDATE projects SET last_opened_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(row.project_id)
         .execute(&state().db)
         .await?;
     Ok(())

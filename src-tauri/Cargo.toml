@@ -70,6 +70,9 @@ thiserror = "2"
 # Misc
 once_cell = "1"
 
+# PTY runner (Phase 2.5) — wraps Windows ConPTY / *nix openpty.
+portable-pty = "0.8"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

@@ -6,6 +6,7 @@ const KEYS = {
   closeToTray: "filehelm.closeToTray",
   sortMode: "filehelm.sortMode",
   hideHintShown: "filehelm.hideHintShown",
+  embeddedRunner: "filehelm.embeddedRunner",
 } as const;
 
 export const prefs = {
@@ -53,6 +54,21 @@ export const prefs = {
   markHideHintShown() {
     try {
       localStorage.setItem(KEYS.hideHintShown, "true");
+    } catch {
+      // ignore
+    }
+  },
+
+  embeddedRunner(): boolean {
+    try {
+      return localStorage.getItem(KEYS.embeddedRunner) === "true";
+    } catch {
+      return false;
+    }
+  },
+  setEmbeddedRunner(v: boolean) {
+    try {
+      localStorage.setItem(KEYS.embeddedRunner, String(v));
     } catch {
       // ignore
     }

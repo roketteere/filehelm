@@ -125,4 +125,21 @@ export const ipc = {
 
   searchProjects: (query: string, maxHits = 200) =>
     invoke<SearchHit[]>("search_projects", { query, maxHits }),
+
+  // Embedded PTY runner
+  ptySpawn: (args: {
+    sessionId: string;
+    cwd: string;
+    command: string;
+    rows: number;
+    cols: number;
+  }) => invoke<void>("pty_spawn", { args }),
+  ptyWrite: (sessionId: string, data: string) =>
+    invoke<void>("pty_write", { sessionId, data }),
+  ptyResize: (sessionId: string, rows: number, cols: number) =>
+    invoke<void>("pty_resize", { sessionId, rows, cols }),
+  ptyKill: (sessionId: string) =>
+    invoke<void>("pty_kill", { sessionId }),
+  runActionEmbedded: (actionId: number, sessionId: string, rows: number, cols: number) =>
+    invoke<void>("run_action_embedded", { actionId, sessionId, rows, cols }),
 };

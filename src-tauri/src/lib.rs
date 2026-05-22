@@ -5,6 +5,7 @@ mod commands;
 mod db;
 mod error;
 mod git;
+mod pty;
 mod runner;
 mod scanner;
 mod search;
@@ -124,6 +125,11 @@ pub fn run() {
             commands::delete_action,
             commands::set_project_sort_order,
             commands::search_projects,
+            commands::pty_spawn,
+            commands::pty_write,
+            commands::pty_resize,
+            commands::pty_kill,
+            commands::run_action_embedded,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");
