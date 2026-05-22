@@ -155,3 +155,14 @@ export interface DirEntry {
   modified_iso: string | null;
 }
 
+export interface RunOutcome {
+  /** External-launch id for the spawned terminal — pass to
+   * killExternalLaunch to kill the process tree. */
+  launch_id: number;
+}
+
+export interface ExternalLaunchInfo {
+  launch_id: number;
+  action_id: number;
+}
+

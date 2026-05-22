@@ -309,8 +309,14 @@ pub async fn project_readme(id: i64) -> AppResult<Option<String>> {
     Ok(None)
 }
 
+#[derive(Serialize)]
+pub struct RunOutcome {
+    /// External-launch id the frontend uses to kill the spawned terminal.
+    pub launch_id: i64,
+}
+
 #[tauri::command]
-pub async fn run_action(action_id: i64) -> AppResult<()> {
+pub async fn run_action(action_id: i64, app: tauri::AppHandle) -> AppResult<RunOutcome> {
     let row: ActionRow = sqlx::query_as(
         "SELECT id, project_id, label, command, working_dir, source, kind, is_user_override, sort_order \
          FROM project_actions WHERE id = ?",
@@ -329,7 +335,13 @@ pub async fn run_action(action_id: i64) -> AppResult<()> {
     };
     let wd = PathBuf::from(&wd_string);
 
-    runner::spawn_external(&wd, &row.command, runner::TerminalChoice::Auto)?;
+    let launch_id = runner::spawn_external(
+        app,
+        row.id,
+        &wd,
+        &row.command,
+        runner::TerminalChoice::Auto,
+    )?;
 
     sqlx::query(
         "INSERT INTO run_history (project_id, action_id, command) VALUES (?, ?, ?)",
@@ -345,7 +357,26 @@ pub async fn run_action(action_id: i64) -> AppResult<()> {
         .execute(&state().db)
         .await?;
 
-    Ok(())
+    Ok(RunOutcome { launch_id })
+}
+
+#[tauri::command]
+pub async fn kill_external_launch(launch_id: i64) -> AppResult<()> {
+    runner::kill_external_launch(launch_id)
+}
+
+#[derive(Serialize)]
+pub struct ExternalLaunchInfo {
+    pub launch_id: i64,
+    pub action_id: i64,
+}
+
+#[tauri::command]
+pub async fn list_external_launches() -> AppResult<Vec<ExternalLaunchInfo>> {
+    Ok(runner::list_external_launches()
+        .into_iter()
+        .map(|(launch_id, action_id)| ExternalLaunchInfo { launch_id, action_id })
+        .collect())
 }
 
 #[tauri::command]
@@ -763,11 +794,38 @@ pub async fn run_action_chain(id: i64) -> AppResult<()> {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join(" ; ");
-    runner::spawn_external(
-        std::path::Path::new(&project_path),
-        &joined,
-        runner::TerminalChoice::Auto,
-    )?;
+    // Chains spawn untracked — they're a one-shot composite, harder to
+    // map onto a single launch_id. Future polish if Joel wants
+    // killable chains.
+    spawn_untracked(std::path::Path::new(&project_path), &joined)?;
+    Ok(())
+}
+
+fn spawn_untracked(working_dir: &std::path::Path, command: &str) -> AppResult<()> {
+    use std::process::Command;
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("wt.exe")
+            .arg("-d")
+            .arg(working_dir)
+            .args(["pwsh", "-NoExit", "-Command"])
+            .arg(command)
+            .spawn()
+            .or_else(|_| {
+                Command::new("cmd.exe")
+                    .args(["/C", "start", "cmd.exe", "/K", command])
+                    .current_dir(working_dir)
+                    .spawn()
+            })?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .current_dir(working_dir)
+            .spawn()?;
+    }
     Ok(())
 }
 

@@ -68,9 +68,13 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
     cwd: string;
     actionId: number;
   } | null>(null);
-  // Action ids currently running embedded (Set so we can extend to
-  // multiple sessions later). Single-session today.
+  // Action ids currently running (embedded PTY session or external
+  // Windows Terminal launch). The `externalLaunches` map carries the
+  // launch_id we need to send to `kill_external_launch`.
   const [running, setRunning] = useState<Set<number>>(new Set());
+  const [externalLaunches, setExternalLaunches] = useState<Map<number, number>>(
+    new Map(),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -125,17 +129,40 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
     setEmbeddedSession(null);
   };
 
+  const stopExternal = async (actionId: number) => {
+    const launchId = externalLaunches.get(actionId);
+    if (launchId === undefined) return;
+    try {
+      await ipc.killExternalLaunch(launchId);
+    } catch {
+      // process may have already exited
+    }
+    setRunning((prev) => {
+      const next = new Set(prev);
+      next.delete(actionId);
+      return next;
+    });
+    setExternalLaunches((prev) => {
+      const next = new Map(prev);
+      next.delete(actionId);
+      return next;
+    });
+  };
+
   const runAction = async (a: ProjectAction) => {
     setError(null);
     // Click on a card that's already running → stop instead of restart.
     if (running.has(a.id)) {
-      await stopRunning();
+      if (externalLaunches.has(a.id)) {
+        await stopExternal(a.id);
+      } else if (embeddedSession?.actionId === a.id) {
+        await stopRunning();
+      }
       return;
     }
     try {
       if (prefs.embeddedRunner()) {
-        // If a different action is currently running embedded, kill
-        // it first — single-session model.
+        // Single-session embedded model — kill any prior session first.
         if (embeddedSession) {
           await ipc.ptyKill(embeddedSession.id).catch(() => {});
           setRunning((prev) => {
@@ -156,10 +183,13 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
         });
         setRunning((prev) => new Set(prev).add(a.id));
       } else {
-        // External Windows Terminal: fire-and-forget. We can't track
-        // or kill these once spawned (Windows Terminal owns the
-        // lifecycle). Close the terminal window manually to stop.
-        await ipc.runAction(a.id);
+        // External Windows Terminal: tracked via launch_id. Click the
+        // card again, or the panel's Kill button, to taskkill /T /F.
+        const outcome = await ipc.runAction(a.id);
+        setExternalLaunches((prev) =>
+          new Map(prev).set(a.id, outcome.launch_id),
+        );
+        setRunning((prev) => new Set(prev).add(a.id));
       }
     } catch (e) {
       setError(`Run failed: ${e}`);
@@ -192,6 +222,72 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
       if (unlisten) unlisten();
     };
   }, [embeddedSession]);
+
+  // Watch every external launch's exit event so the card flips back
+  // to Play when the user closes the terminal window manually.
+  useEffect(() => {
+    if (externalLaunches.size === 0) return;
+    const cleanups: Array<() => void> = [];
+    (async () => {
+      try {
+        const webview = getCurrentWebview();
+        for (const [actionId, launchId] of externalLaunches.entries()) {
+          const off = await webview.listen(
+            `filehelm:external-exit:${launchId}`,
+            () => {
+              setRunning((prev) => {
+                const next = new Set(prev);
+                next.delete(actionId);
+                return next;
+              });
+              setExternalLaunches((prev) => {
+                const next = new Map(prev);
+                next.delete(actionId);
+                return next;
+              });
+            },
+          );
+          cleanups.push(off);
+        }
+      } catch {
+        // not in Tauri
+      }
+    })();
+    return () => cleanups.forEach((off) => off());
+  }, [externalLaunches]);
+
+  // On mount, ask the backend which external launches are alive so the
+  // running state survives a window hide/show via the tray.
+  useEffect(() => {
+    let cancelled = false;
+    ipc
+      .listExternalLaunches()
+      .then((launches) => {
+        if (cancelled) return;
+        const relevant = launches.filter((l) =>
+          actions.some((a) => a.id === l.action_id),
+        );
+        if (relevant.length === 0) return;
+        setExternalLaunches((prev) => {
+          const next = new Map(prev);
+          for (const l of relevant) next.set(l.action_id, l.launch_id);
+          return next;
+        });
+        setRunning((prev) => {
+          const next = new Set(prev);
+          for (const l of relevant) next.add(l.action_id);
+          return next;
+        });
+      })
+      .catch(() => {
+        // not in Tauri or backend older than this commit
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Re-run whenever the action list changes so newly-loaded projects
+    // pick up their already-running launches.
+  }, [actions]);
 
   const rescan = async () => {
     setLoading(true);

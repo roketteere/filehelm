@@ -4,10 +4,32 @@
 //! and fall back to `cmd.exe /K`. The command is run with the specified
 //! working directory so relative paths work.
 
+use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command};
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Mutex;
+
+use once_cell::sync::Lazy;
+use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::error::{AppError, AppResult};
+
+/// Tracks external (wt.exe / cmd.exe) launches so the UI can kill them.
+/// The watcher thread per launch owns the `Child` and removes the entry
+/// when the process exits.
+struct LaunchTracker {
+    pid: u32,
+    action_id: i64,
+}
+
+static EXTERNAL_LAUNCHES: Lazy<Mutex<HashMap<i64, LaunchTracker>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+static NEXT_LAUNCH_ID: AtomicI64 = AtomicI64::new(1);
+
+fn alloc_launch_id() -> i64 {
+    NEXT_LAUNCH_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum TerminalChoice {
@@ -20,7 +42,13 @@ pub enum TerminalChoice {
     Powershell,
 }
 
-pub fn spawn_external(working_dir: &Path, command: &str, choice: TerminalChoice) -> AppResult<()> {
+pub fn spawn_external<R: Runtime>(
+    app: AppHandle<R>,
+    action_id: i64,
+    working_dir: &Path,
+    command: &str,
+    choice: TerminalChoice,
+) -> AppResult<i64> {
     if !working_dir.exists() {
         return Err(AppError::Invalid(format!(
             "working_dir does not exist: {}",
@@ -31,54 +59,119 @@ pub fn spawn_external(working_dir: &Path, command: &str, choice: TerminalChoice)
         return Err(AppError::Invalid("empty command".into()));
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        match choice {
-            TerminalChoice::Auto | TerminalChoice::WindowsTerminal => {
-                // Try Windows Terminal first.
-                let res = Command::new("wt.exe")
-                    .arg("-d")
-                    .arg(working_dir)
-                    .args(["pwsh", "-NoExit", "-Command"])
-                    .arg(command)
-                    .spawn();
-                if res.is_ok() {
-                    return Ok(());
-                }
-                // Fall back to cmd.exe.
-                fallback_cmd(working_dir, command)
-            }
-            TerminalChoice::Powershell => {
-                Command::new("pwsh")
-                    .args(["-NoExit", "-Command", command])
-                    .current_dir(working_dir)
-                    .spawn()?;
-                Ok(())
-            }
-            TerminalChoice::Cmd => fallback_cmd(working_dir, command),
-        }
-    }
+    let child = spawn_child(working_dir, command, choice)?;
+    Ok(register_launch(app, action_id, child))
+}
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = choice;
-        // Best-effort: spawn user's $SHELL via xterm.
-        Command::new("sh")
-            .arg("-c")
+#[cfg(target_os = "windows")]
+fn spawn_child(working_dir: &Path, command: &str, choice: TerminalChoice) -> AppResult<Child> {
+    match choice {
+        TerminalChoice::Auto | TerminalChoice::WindowsTerminal => Command::new("wt.exe")
+            .arg("-d")
+            .arg(working_dir)
+            .args(["pwsh", "-NoExit", "-Command"])
             .arg(command)
+            .spawn()
+            .or_else(|_| spawn_cmd(working_dir, command))
+            .map_err(AppError::Io),
+        TerminalChoice::Powershell => Command::new("pwsh")
+            .args(["-NoExit", "-Command", command])
             .current_dir(working_dir)
-            .spawn()?;
-        Ok(())
+            .spawn()
+            .map_err(AppError::Io),
+        TerminalChoice::Cmd => spawn_cmd(working_dir, command).map_err(AppError::Io),
     }
 }
 
 #[cfg(target_os = "windows")]
-fn fallback_cmd(working_dir: &Path, command: &str) -> AppResult<()> {
+fn spawn_cmd(working_dir: &Path, command: &str) -> std::io::Result<Child> {
     Command::new("cmd.exe")
         .args(["/C", "start", "cmd.exe", "/K", command])
         .current_dir(working_dir)
-        .spawn()?;
+        .spawn()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_child(working_dir: &Path, command: &str, _choice: TerminalChoice) -> AppResult<Child> {
+    Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .current_dir(working_dir)
+        .spawn()
+        .map_err(AppError::Io)
+}
+
+/// Register a freshly-spawned external Child + start a watcher thread
+/// that emits a `filehelm:external-exit:<launch_id>` event when the
+/// process ends and cleans up the map. Returns the launch_id the UI
+/// uses to track + kill.
+fn register_launch<R: Runtime>(app: AppHandle<R>, action_id: i64, mut child: Child) -> i64 {
+    let launch_id = alloc_launch_id();
+    let pid = child.id();
+    EXTERNAL_LAUNCHES
+        .lock()
+        .unwrap()
+        .insert(launch_id, LaunchTracker { pid, action_id });
+
+    let app_for_thread = app.clone();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        EXTERNAL_LAUNCHES.lock().unwrap().remove(&launch_id);
+        let _ = app_for_thread.emit(
+            &format!("filehelm:external-exit:{launch_id}"),
+            ExternalExit {
+                launch_id,
+                action_id,
+            },
+        );
+    });
+
+    launch_id
+}
+
+#[derive(serde::Serialize, Clone)]
+struct ExternalExit {
+    launch_id: i64,
+    action_id: i64,
+}
+
+/// Kill an external launch by its tracked id. On Windows we shell to
+/// `taskkill /T /F` to take down the whole process tree (the wt.exe
+/// window plus the pwsh/cmd it hosts plus whatever they spawned).
+pub fn kill_external_launch(launch_id: i64) -> AppResult<()> {
+    let tracker = EXTERNAL_LAUNCHES.lock().unwrap().remove(&launch_id);
+    let Some(t) = tracker else {
+        return Err(AppError::NotFound(format!(
+            "external launch {launch_id} not running"
+        )));
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &t.pid.to_string()])
+            .output();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Best-effort SIGTERM via `kill`.
+        let _ = Command::new("kill")
+            .args(["-TERM", &t.pid.to_string()])
+            .output();
+    }
     Ok(())
+}
+
+/// Snapshot the currently-tracked external launches. Used by the
+/// frontend on boot to re-hydrate its "running" state if the user
+/// dismissed + reopened the window.
+pub fn list_external_launches() -> Vec<(i64, i64)> {
+    EXTERNAL_LAUNCHES
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(launch_id, t)| (*launch_id, t.action_id))
+        .collect()
 }
 
 pub fn open_editor(project_path: &Path) -> AppResult<()> {

@@ -173,6 +173,8 @@ pub fn run() {
             commands::fs_mkdir,
             commands::fs_delete,
             commands::fs_home,
+            commands::kill_external_launch,
+            commands::list_external_launches,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");

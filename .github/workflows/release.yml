@@ -1,0 +1,84 @@
+name: release
+
+# Trigger on a version-tag push or a manual dispatch. The tag format is
+# `filehelm-vX.Y.Z`. The workflow builds signed installers for Windows
+# (today's only supported platform) and publishes them as a GitHub
+# Release alongside a `latest.json` that the in-app updater polls.
+#
+# Secrets required on the repo (Settings → Secrets and variables →
+# Actions):
+#   - TAURI_SIGNING_PRIVATE_KEY           — contents of
+#       .secrets/filehelm-updater.key in this repo
+#   - TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — leave empty string if the
+#       keypair was generated with `--password ""` (the default we use)
+#
+# Until Joel pushes to GitHub + adds those secrets, this workflow is
+# dormant. Existing installs that hit "Check for updates" will keep
+# 404'ing — exactly as documented.
+
+on:
+  push:
+    tags:
+      - "filehelm-v*"
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Tag to publish (without `filehelm-v` prefix)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node + pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build, sign, and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name || format('filehelm-v{0}', inputs.version_tag) }}
+          releaseName: "FileHelm ${{ github.ref_name || inputs.version_tag }}"
+          releaseBody: |
+            See CHANGELOG.md.
+
+            The desktop app checks for updates via
+            `Settings → Check for updates`. Bundles are signed with
+            the keypair tracked in `.secrets/credentials.md`.
+          releaseDraft: false
+          prerelease: false
+          # `tauri-action` automatically generates and uploads a
+          # `latest.json` manifest matching the endpoint baked into
+          # `src-tauri/tauri.conf.json`. No extra step needed.
+          includeUpdaterJson: true

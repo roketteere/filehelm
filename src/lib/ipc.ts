@@ -6,6 +6,7 @@ import type {
   CloneResult,
   DetectedUrl,
   DirEntry,
+  ExternalLaunchInfo,
   GitCommit,
   GitInfo,
   GitOutcome,
@@ -14,6 +15,7 @@ import type {
   ProjectStats,
   Root,
   RunHistoryRow,
+  RunOutcome,
   ScanReport,
   SearchHit,
 } from "@/types";
@@ -38,7 +40,11 @@ export const ipc = {
   projectReadme: (id: number) =>
     invoke<string | null>("project_readme", { id }),
   runAction: (actionId: number) =>
-    invoke<void>("run_action", { actionId }),
+    invoke<RunOutcome>("run_action", { actionId }),
+  killExternalLaunch: (launchId: number) =>
+    invoke<void>("kill_external_launch", { launchId }),
+  listExternalLaunches: () =>
+    invoke<ExternalLaunchInfo[]>("list_external_launches"),
 
   // System launches
   openInEditor: (projectId: number) =>
