@@ -32,20 +32,35 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .icon(icon)
         .tooltip("FileHelm — project launcher")
         .menu(&menu)
+        // Left-click should toggle the window directly instead of opening the
+        // menu. The menu still opens on right-click.
         .show_menu_on_left_click(false)
-        .on_menu_event(move |app, event| match event.id.as_ref() {
-            "tray-show" => toggle_main_window(app),
-            "tray-quit" => app.exit(0),
-            _ => {}
+        .on_menu_event(move |app, event| {
+            tracing::info!(menu_id = ?event.id, "tray menu event");
+            match event.id.as_ref() {
+                "tray-show" => toggle_main_window(app),
+                "tray-quit" => app.exit(0),
+                _ => {}
+            }
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                toggle_main_window(tray.app_handle());
+            // Trace every event so we can diagnose missing clicks via
+            // `RUST_LOG=info,filehelm=debug` in dev.
+            tracing::info!(?event, "tray icon event");
+            match event {
+                // Single left-click — fires on the Up edge on Windows.
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => toggle_main_window(tray.app_handle()),
+                // Double-click as a fallback (some Windows shell configs
+                // suppress single-click events).
+                TrayIconEvent::DoubleClick {
+                    button: MouseButton::Left,
+                    ..
+                } => toggle_main_window(tray.app_handle()),
+                _ => {}
             }
         })
         .build(app)?;
@@ -54,17 +69,18 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 }
 
 fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(win) = app.get_webview_window("main") {
-        match win.is_visible() {
-            Ok(true) => {
-                let _ = win.hide();
-            }
-            Ok(false) => {
-                let _ = win.show();
-                let _ = win.set_focus();
-                let _ = win.unminimize();
-            }
-            Err(e) => tracing::warn!(error = ?e, "is_visible failed"),
-        }
+    let Some(win) = app.get_webview_window("main") else {
+        tracing::warn!("toggle_main_window: no 'main' window");
+        return;
+    };
+    let visible = win.is_visible().unwrap_or(false);
+    let minimized = win.is_minimized().unwrap_or(false);
+    tracing::info!(visible, minimized, "toggle_main_window");
+    if visible && !minimized {
+        let _ = win.hide();
+    } else {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
     }
 }
