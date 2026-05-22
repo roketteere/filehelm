@@ -641,13 +641,13 @@ function ProjectRow({
           <GitBadge projectId={project.id} compact className="ml-auto" />
         </div>
       </div>
-      <div className="flex shrink-0 items-center -space-x-1">
+      <div className="flex shrink-0 items-center gap-1 pr-0.5">
         {badges.map((b, idx) => (
           <span
             key={`${b.kind}:${b.value}:${idx}`}
-            className="grid h-6 w-6 place-items-center rounded-full bg-card ring-1 ring-border"
+            className="grid h-5 w-5 place-items-center rounded-full bg-card ring-1 ring-border"
           >
-            <LanguageIcon slug={b.value} size={14} />
+            <LanguageIcon slug={b.value} size={12} />
           </span>
         ))}
       </div>
