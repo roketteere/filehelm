@@ -11,6 +11,24 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 
 (nothing yet)
 
+## [0.2.2] — 2026-05-22
+
+### Fixed
+
+- **Migration-checksum drift no longer crashes the app on launch.**
+  v0.2.1 panicked with `migration ... was previously applied but
+  has been modified` if your `~/.filehelm/db.sqlite` was created
+  by an earlier dev build (or a future restored backup) whose
+  migration content differs from the one shipped in this version.
+  Now the offending DB is archived to
+  `db.sqlite.corrupt-<UTC-timestamp>`, the WAL/SHM siblings are
+  cleaned up, and the app boots fresh against the current
+  schema. Data loss is bounded — projects + roots auto-rediscover
+  on rescan, the archive is preserved for forensic recovery, and
+  the actual project files on disk are never touched. Migrations
+  remain sealed-once-shipped going forward (codified in
+  `src-tauri/src/db.rs`).
+
 ## [0.2.1] — 2026-05-22
 
 ### Added
@@ -172,7 +190,8 @@ Highlights:
 - OS-global hotkey + Tauri auto-updater scaffold
 - Norton-style dual-pane file commander (MVP) + toolbar upgrades
 
-[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.1...HEAD
+[Unreleased]: https://github.com/roketteere/filehelm/compare/filehelm-v0.2.2...HEAD
+[0.2.2]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.2
 [0.2.1]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.1
 [0.2.0]: https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.0
 [0.1.0]: https://github.com/roketteere/filehelm/commits/c42a2d1

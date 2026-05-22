@@ -1,6 +1,6 @@
 [package]
 name = "filehelm"
-version = "0.2.1"
+version = "0.2.2"
 description = "filehelm — local project launcher + file commander"
 authors = [
     "Joel Perez (@roketteere) <jxp489@gmail.com>",
