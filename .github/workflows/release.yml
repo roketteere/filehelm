@@ -72,9 +72,10 @@ jobs:
             patchelf
 
       - name: Install Node + pnpm
+        # pnpm/action-setup@v4 reads the pinned version from
+        # package.json#packageManager — don't pass an inline `version`
+        # input or the action refuses to choose between them.
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
