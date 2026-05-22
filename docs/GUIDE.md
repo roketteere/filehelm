@@ -50,6 +50,15 @@ FileHelm ships **signed installers** for:
 The bundles are signed with the same minisign keypair, so the
 in-app auto-updater works on all three OSes from the same `latest.json`.
 
+**Current release: [v0.2.0](https://github.com/roketteere/filehelm/releases/tag/filehelm-v0.2.0).**
+Live downloads as of this writing: Windows (`.msi` + `.exe`), Linux
+(`.deb` + `.rpm` + `.AppImage`), and macOS Apple Silicon (`.dmg`).
+The macOS Intel (`x86_64`) bundle is still building — the
+`macos-13` GitHub Actions runner has been slow allocating today;
+the asset will publish to the same release page automatically
+when the matrix job finishes, and the in-app updater goes live
+shortly after via the `compose-updater-json` step.
+
 **Important macOS note:** bundles are NOT Apple-Developer-ID-notarized
 yet, so first launch needs the **right-click → Open** workaround or
 `xattr -d com.apple.quarantine /Applications/FileHelm.app`. See the
