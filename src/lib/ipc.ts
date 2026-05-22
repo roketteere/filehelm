@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CloneResult,
   Project,
   ProjectAction,
   Root,
@@ -36,4 +37,8 @@ export const ipc = {
   openInExplorer: (projectId: number) =>
     invoke<void>("open_in_explorer", { projectId }),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
+
+  // GitHub clone & import
+  cloneRepo: (url: string, dest: string) =>
+    invoke<CloneResult>("clone_repo", { args: { url, dest } }),
 };

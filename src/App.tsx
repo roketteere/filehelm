@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FolderCog, RefreshCcw, Loader2, Anchor } from "lucide-react";
+import { FolderCog, Github, RefreshCcw, Loader2, Anchor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProjectList } from "@/components/ProjectList";
 import { ProjectDetail } from "@/components/ProjectDetail";
 import { RootsConfig } from "@/components/RootsConfig";
+import { GithubDialog } from "@/components/GithubDialog";
 import { ThemePicker } from "@/components/ThemePicker";
 import { applyStoredTheme } from "@/lib/theme";
 import { ipc } from "@/lib/ipc";
@@ -19,6 +20,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [rootsOpen, setRootsOpen] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
@@ -84,6 +86,7 @@ export default function App() {
           scanning={scanning}
           onScanAll={scanAll}
           onOpenRoots={() => setRootsOpen(true)}
+          onOpenGithub={() => setGithubOpen(true)}
         />
 
         {bootError && (
@@ -129,6 +132,17 @@ export default function App() {
         projects={projects}
         onRootsChanged={rootsChanged}
       />
+
+      <GithubDialog
+        open={githubOpen}
+        onOpenChange={setGithubOpen}
+        defaultParent={roots[0]?.abs_path ?? null}
+        onCloned={async (p) => {
+          await refreshRoots();
+          await refreshProjects();
+          setSelectedId(p.id);
+        }}
+      />
     </TooltipProvider>
   );
 }
@@ -139,12 +153,14 @@ function Header({
   scanning,
   onScanAll,
   onOpenRoots,
+  onOpenGithub,
 }: {
   rootsCount: number;
   projectCount: number;
   scanning: boolean;
   onScanAll: () => void;
   onOpenRoots: () => void;
+  onOpenGithub: () => void;
 }) {
   return (
     <header className="flex h-12 items-center justify-between border-b border-border bg-card/70 px-4 backdrop-blur">
@@ -166,6 +182,10 @@ function Header({
       </div>
       <div className="flex items-center gap-2">
         <ThemePicker />
+        <Button variant="outline" size="sm" onClick={onOpenGithub}>
+          <Github />
+          <span className="hidden md:inline">Clone from GitHub</span>
+        </Button>
         <Button variant="outline" size="sm" onClick={onScanAll} disabled={scanning || rootsCount === 0}>
           {scanning ? <Loader2 className="animate-spin" /> : <RefreshCcw />}
           Scan all

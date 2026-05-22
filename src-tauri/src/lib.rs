@@ -1,5 +1,6 @@
 //! filehelm Tauri 2 application entry.
 
+mod clone;
 mod commands;
 mod db;
 mod error;
@@ -59,6 +60,7 @@ pub fn run() {
             commands::open_terminal_here,
             commands::open_in_explorer,
             commands::reveal_path,
+            commands::clone_repo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");

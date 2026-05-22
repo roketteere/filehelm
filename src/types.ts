@@ -55,3 +55,8 @@ export interface ScanReport {
   removed: number;
   errors: string[];
 }
+
+export interface CloneResult {
+  project: Project;
+  log: string[];
+}

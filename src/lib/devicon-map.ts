@@ -116,6 +116,74 @@ export function iconFor(key: string): IconData | null {
   return map[key] ?? null;
 }
 
+// File-extension → simple-icons slug map for leaf rows in the GitHub
+// file tree. Keep the map narrow — generic file icon for unknowns.
+const EXT_TO_SLUG: Record<string, string> = {
+  // Languages
+  rs: "rust",
+  ts: "typescript",
+  tsx: "react",
+  js: "javascript",
+  jsx: "react",
+  mjs: "javascript",
+  cjs: "javascript",
+  py: "python",
+  go: "go",
+  java: "java",
+  kt: "kotlin",
+  kts: "kotlin",
+  rb: "ruby",
+  php: "php",
+  dart: "dart",
+  ex: "elixir",
+  exs: "elixir",
+  cs: "csharp",
+  fs: "csharp",
+  vue: "vue",
+  svelte: "svelte",
+  astro: "astro",
+  // Config / build
+  toml: "rust",
+  lock: "rust",
+  yaml: "docker",
+  yml: "docker",
+  dockerfile: "docker",
+  // Docs
+  md: "git",
+  mdx: "git",
+};
+
+const SPECIAL_FILENAMES: Record<string, string> = {
+  "package.json": "node",
+  "tsconfig.json": "typescript",
+  "Cargo.toml": "rust",
+  "go.mod": "go",
+  "pyproject.toml": "python",
+  "requirements.txt": "python",
+  Dockerfile: "docker",
+  "docker-compose.yml": "docker",
+  Makefile: "make",
+  Justfile: "just",
+  "tauri.conf.json": "tauri",
+  "next.config.js": "next",
+  "next.config.ts": "next",
+  "next.config.mjs": "next",
+  "vite.config.ts": "vite",
+  "vite.config.js": "vite",
+  "svelte.config.js": "svelte",
+  "astro.config.mjs": "astro",
+};
+
+/** Map a filename → simple-icons slug for the LanguageIcon component. */
+export function extensionToSlug(filename: string): string | null {
+  if (!filename) return null;
+  if (SPECIAL_FILENAMES[filename]) return SPECIAL_FILENAMES[filename];
+  const dot = filename.lastIndexOf(".");
+  if (dot < 0) return null;
+  const ext = filename.slice(dot + 1).toLowerCase();
+  return EXT_TO_SLUG[ext] ?? null;
+}
+
 // Friendly display label for a badge key.
 export function labelFor(key: string): string {
   const overrides: Record<string, string> = {

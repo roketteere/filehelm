@@ -26,6 +26,9 @@ pub enum AppError {
     #[error("invalid input: {0}")]
     Invalid(String),
 
+    #[error("clone: {0}")]
+    Clone(String),
+
     #[error("other: {0}")]
     Other(#[from] anyhow::Error),
 }

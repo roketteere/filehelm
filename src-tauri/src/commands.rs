@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::clone;
 use crate::error::{AppError, AppResult};
 use crate::runner;
 use crate::scanner;
@@ -372,6 +373,110 @@ pub async fn open_in_explorer(project_id: i64) -> AppResult<()> {
 pub async fn reveal_path(path: String) -> AppResult<()> {
     runner::reveal_in_explorer(Path::new(&path))?;
     Ok(())
+}
+
+// ---------- GitHub clone & import ----------
+
+#[derive(Deserialize)]
+pub struct CloneRepoArgs {
+    pub url: String,
+    pub dest: String,
+}
+
+#[derive(Serialize)]
+pub struct CloneResult {
+    pub project: ProjectRow,
+    pub log: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn clone_repo(args: CloneRepoArgs) -> AppResult<CloneResult> {
+    let dest = PathBuf::from(&args.dest);
+    let outcome = clone::clone_to(&args.url, &dest).await?;
+    let dest_str = outcome.dest.to_string_lossy().to_string();
+
+    let parent = outcome
+        .dest
+        .parent()
+        .ok_or_else(|| AppError::Invalid("destination has no parent".into()))?;
+    let parent_str = parent.to_string_lossy().to_string();
+    let parent_norm = normalize_windows_unc(parent);
+
+    let db = &state().db;
+    // Ensure a root exists for the parent directory. If one already exists
+    // for an equivalent path (canonicalized), reuse it.
+    let existing_root: Option<RootRow> = sqlx::query_as::<_, RootRow>(
+        "SELECT id, abs_path, label, enabled, added_at FROM roots WHERE abs_path = ? OR abs_path = ?",
+    )
+    .bind(&parent_str)
+    .bind(&parent_norm)
+    .fetch_optional(db)
+    .await?;
+
+    let root_id = if let Some(r) = existing_root {
+        r.id
+    } else {
+        let row: RootRow = sqlx::query_as(
+            "INSERT INTO roots (abs_path, label) VALUES (?, ?) RETURNING id, abs_path, label, enabled, added_at",
+        )
+        .bind(&parent_norm)
+        .bind::<Option<String>>(None)
+        .fetch_one(db)
+        .await?;
+        row.id
+    };
+
+    // Scan the root so the new clone gets picked up + classified.
+    let projects = scanner::scan_root(parent)?;
+    for p in &projects {
+        match upsert_project(root_id, p).await {
+            Ok(_) => {}
+            Err(e) => tracing::warn!(error = ?e, project = ?p.abs_path, "upsert during clone import failed"),
+        }
+    }
+
+    // Find the freshly-cloned project. Match by either the literal dest
+    // string OR the canonicalized form (Windows UNC normalisation).
+    let dest_norm = normalize_windows_unc(&outcome.dest);
+    let row: Option<ProjectBase> = sqlx::query_as(
+        "SELECT id, root_id, abs_path, name, primary_language, pinned, last_opened_at, last_scanned_at \
+         FROM projects WHERE abs_path = ? OR abs_path = ?",
+    )
+    .bind(&dest_str)
+    .bind(&dest_norm)
+    .fetch_optional(db)
+    .await?;
+
+    let row = row.ok_or_else(|| {
+        AppError::Other(anyhow::anyhow!(
+            "clone succeeded but the new project at {} wasn't picked up by the scanner",
+            outcome.dest.display()
+        ))
+    })?;
+
+    let badges = sqlx::query_as::<_, BadgeRow>(
+        "SELECT kind, value FROM project_tags WHERE project_id = ? ORDER BY kind, value",
+    )
+    .bind(row.id)
+    .fetch_all(db)
+    .await?;
+
+    let project = ProjectRow {
+        id: row.id,
+        root_id: row.root_id,
+        abs_path: row.abs_path,
+        name: row.name,
+        primary_language: row.primary_language,
+        badges,
+        pinned: row.pinned,
+        last_opened_at: row.last_opened_at,
+        last_scanned_at: row.last_scanned_at,
+    };
+
+    Ok(CloneResult {
+        project,
+        log: outcome.log,
+    })
 }
 
 // ---------- Internals ----------
