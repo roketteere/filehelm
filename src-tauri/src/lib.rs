@@ -7,6 +7,7 @@ mod error;
 mod git;
 mod runner;
 mod scanner;
+mod stats;
 mod tray;
 
 use std::path::PathBuf;
@@ -105,6 +106,18 @@ pub fn run() {
             commands::add_root_from_path,
             commands::set_close_to_tray,
             commands::get_close_to_tray,
+            commands::project_changelog,
+            commands::project_dev_url,
+            commands::set_project_icon,
+            commands::project_stats,
+            commands::backup_db,
+            commands::restore_db,
+            commands::upsert_action_chain,
+            commands::list_action_chains,
+            commands::delete_action_chain,
+            commands::run_action_chain,
+            commands::upsert_action,
+            commands::delete_action,
         ])
         .run(tauri::generate_context!())
         .expect("error while running filehelm");

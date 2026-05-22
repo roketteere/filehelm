@@ -1,11 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ActionChainRow,
+  BackupResult,
   CloneResult,
+  DetectedUrl,
   GitCommit,
   GitInfo,
   GitOutcome,
   Project,
   ProjectAction,
+  ProjectStats,
   Root,
   RunHistoryRow,
   ScanReport,
@@ -70,4 +74,41 @@ export const ipc = {
   setCloseToTray: (enabled: boolean) =>
     invoke<void>("set_close_to_tray", { enabled }),
   getCloseToTray: () => invoke<boolean>("get_close_to_tray"),
+
+  // Phase 2.3 — small lifts
+  projectChangelog: (id: number) =>
+    invoke<string | null>("project_changelog", { id }),
+  projectDevUrl: (id: number) =>
+    invoke<DetectedUrl | null>("project_dev_url", { id }),
+  setProjectIcon: (id: number, slug: string | null) =>
+    invoke<void>("set_project_icon", { id, slug }),
+  projectStats: (id: number) =>
+    invoke<ProjectStats>("project_stats", { id }),
+  backupDb: (dest: string) =>
+    invoke<BackupResult>("backup_db", { dest }),
+  restoreDb: (src: string) => invoke<number>("restore_db", { src }),
+
+  // Action editor + chains
+  upsertAction: (args: {
+    id?: number;
+    project_id: number;
+    label: string;
+    command: string;
+    working_dir?: string | null;
+    kind: string;
+  }) => invoke<number>("upsert_action", { args }),
+  deleteAction: (id: number) => invoke<void>("delete_action", { id }),
+  listActionChains: (projectId: number) =>
+    invoke<ActionChainRow[]>("list_action_chains", { projectId }),
+  upsertActionChain: (args: {
+    id?: number;
+    project_id: number;
+    label: string;
+    kind: string;
+    steps: { command: string; working_dir?: string | null }[];
+  }) => invoke<number>("upsert_action_chain", { args }),
+  deleteActionChain: (id: number) =>
+    invoke<void>("delete_action_chain", { id }),
+  runActionChain: (id: number) =>
+    invoke<void>("run_action_chain", { id }),
 };

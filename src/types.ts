@@ -25,6 +25,8 @@ export interface Project {
   pinned: boolean;
   last_opened_at: string | null;
   last_scanned_at: string;
+  custom_icon_slug?: string | null;
+  sort_order?: number;
 }
 
 export type ActionKind =
@@ -94,3 +96,40 @@ export interface RunHistoryRow {
   exit_code: number | null;
   duration_ms: number | null;
 }
+
+// Project extras (Phase 2.3+)
+export interface DetectedUrl {
+  url: string;
+  source: string;
+}
+
+export interface LangStats {
+  key: string;
+  label: string;
+  files: number;
+  lines: number;
+  bytes: number;
+}
+
+export interface ProjectStats {
+  total_files: number;
+  total_lines: number;
+  total_bytes: number;
+  by_language: LangStats[];
+  truncated: boolean;
+}
+
+export interface BackupResult {
+  dest: string;
+  bytes: number;
+}
+
+export interface ActionChainRow {
+  id: number;
+  project_id: number;
+  label: string;
+  steps_json: string;
+  kind: string;
+  sort_order: number;
+}
+

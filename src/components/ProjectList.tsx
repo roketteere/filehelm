@@ -278,9 +278,14 @@ function ProjectRow({
   selected: boolean;
   onClick: () => void;
 }) {
-  const badges = project.badges.length > 0
+  const baseBadges = project.badges.length > 0
     ? project.badges.slice(0, 3)
     : [{ kind: "language" as const, value: project.primary_language ?? "" }];
+  // If the user set a custom icon, hoist it to the front of the icon
+  // stack so it's the dominant glyph in the rail.
+  const badges = project.custom_icon_slug
+    ? [{ kind: "language" as const, value: project.custom_icon_slug }, ...baseBadges].slice(0, 3)
+    : baseBadges;
 
   return (
     <button

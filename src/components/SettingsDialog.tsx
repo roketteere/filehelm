@@ -28,6 +28,8 @@ import { getStoredToken, setStoredToken } from "@/lib/github";
 import { ipc } from "@/lib/ipc";
 import { prefs } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
+import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { Download, Upload } from "lucide-react";
 
 // Inline-import the markdown so it ships in the bundle (same source of
 // truth as the in-repo docs/GUIDE.md). Vite's `?raw` suffix returns
@@ -201,6 +203,21 @@ function GeneralTab() {
 
       <Separator />
 
+      <Separator />
+
+      <div>
+        <div className="mb-1 text-sm font-semibold">Backup &amp; restore</div>
+        <div className="mb-2 text-xs text-muted-foreground">
+          Backup copies the live SQLite DB at{" "}
+          <code>~/.filehelm/db.sqlite</code> after a WAL checkpoint. Restore
+          overwrites the live DB — restart FileHelm afterward for the new
+          state to take effect.
+        </div>
+        <BackupRestoreButtons />
+      </div>
+
+      <Separator />
+
       <div>
         <div className="mb-1 text-sm font-semibold">Reset all settings</div>
         <div className="mb-2 text-xs text-muted-foreground">
@@ -213,6 +230,72 @@ function GeneralTab() {
           Reset all settings
         </Button>
       </div>
+    </div>
+  );
+}
+
+function BackupRestoreButtons() {
+  const [busy, setBusy] = useState<"backup" | "restore" | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const backup = async () => {
+    setMsg(null);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const picked = await saveFileDialog({
+      title: "Save FileHelm DB backup",
+      defaultPath: `filehelm-${stamp}.sqlite`,
+      filters: [{ name: "SQLite", extensions: ["sqlite"] }],
+    });
+    if (!picked) return;
+    setBusy("backup");
+    try {
+      const r = await ipc.backupDb(picked);
+      setMsg(`Backed up ${r.bytes.toLocaleString()} bytes → ${r.dest}`);
+    } catch (e) {
+      setMsg(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restore = async () => {
+    setMsg(null);
+    const picked = await openFileDialog({
+      title: "Pick a FileHelm DB backup",
+      multiple: false,
+      filters: [{ name: "SQLite", extensions: ["sqlite", "sqlite3", "db"] }],
+    });
+    if (!picked || typeof picked !== "string") return;
+    setBusy("restore");
+    try {
+      const bytes = await ipc.restoreDb(picked);
+      setMsg(
+        `Restored ${bytes.toLocaleString()} bytes. Restart FileHelm to load the new state.`,
+      );
+    } catch (e) {
+      setMsg(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={backup} disabled={!!busy}>
+          {busy === "backup" ? <Loader2 className="animate-spin" /> : <Download />}
+          Backup DB
+        </Button>
+        <Button variant="outline" size="sm" onClick={restore} disabled={!!busy}>
+          {busy === "restore" ? <Loader2 className="animate-spin" /> : <Upload />}
+          Restore DB
+        </Button>
+      </div>
+      {msg && (
+        <div className="rounded border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground">
+          {msg}
+        </div>
+      )}
     </div>
   );
 }

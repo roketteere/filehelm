@@ -12,6 +12,7 @@ use crate::git;
 use crate::runner;
 use crate::scanner;
 use crate::state;
+use crate::stats;
 
 // ---------- DTOs returned to the frontend ----------
 
@@ -35,6 +36,8 @@ pub struct ProjectRow {
     pub pinned: bool,
     pub last_opened_at: Option<chrono::NaiveDateTime>,
     pub last_scanned_at: chrono::NaiveDateTime,
+    pub custom_icon_slug: Option<String>,
+    pub sort_order: i64,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -124,7 +127,7 @@ pub async fn remove_root(id: i64) -> AppResult<()> {
 #[tauri::command]
 pub async fn list_projects() -> AppResult<Vec<ProjectRow>> {
     let rows = sqlx::query_as::<_, ProjectBase>(
-        "SELECT id, root_id, abs_path, name, primary_language, pinned, last_opened_at, last_scanned_at \
+        "SELECT id, root_id, abs_path, name, primary_language, pinned, last_opened_at, last_scanned_at, custom_icon_slug, sort_order \
          FROM projects \
          ORDER BY pinned DESC, last_opened_at DESC NULLS LAST, name ASC",
     )
@@ -149,6 +152,8 @@ pub async fn list_projects() -> AppResult<Vec<ProjectRow>> {
             pinned: r.pinned,
             last_opened_at: r.last_opened_at,
             last_scanned_at: r.last_scanned_at,
+            custom_icon_slug: r.custom_icon_slug,
+            sort_order: r.sort_order,
         });
     }
     Ok(out)
@@ -164,6 +169,8 @@ struct ProjectBase {
     pinned: bool,
     last_opened_at: Option<chrono::NaiveDateTime>,
     last_scanned_at: chrono::NaiveDateTime,
+    custom_icon_slug: Option<String>,
+    sort_order: i64,
 }
 
 #[tauri::command]
@@ -224,7 +231,7 @@ pub async fn scan_root(root_id: i64) -> AppResult<ScanReport> {
 #[tauri::command]
 pub async fn rescan_project(id: i64) -> AppResult<ProjectRow> {
     let row: ProjectBase = sqlx::query_as(
-        "SELECT id, root_id, abs_path, name, primary_language, pinned, last_opened_at, last_scanned_at \
+        "SELECT id, root_id, abs_path, name, primary_language, pinned, last_opened_at, last_scanned_at, custom_icon_slug, sort_order \
          FROM projects WHERE id = ?",
     )
     .bind(id)
@@ -260,6 +267,8 @@ pub async fn rescan_project(id: i64) -> AppResult<ProjectRow> {
         pinned: row.pinned,
         last_opened_at: row.last_opened_at,
         last_scanned_at: chrono::Utc::now().naive_utc(),
+        custom_icon_slug: row.custom_icon_slug,
+        sort_order: row.sort_order,
     })
 }
 
@@ -481,6 +490,318 @@ pub async fn get_close_to_tray() -> AppResult<bool> {
         .load(std::sync::atomic::Ordering::Relaxed))
 }
 
+// ---------- CHANGELOG / generic doc reader ----------
+
+#[tauri::command]
+pub async fn project_changelog(id: i64) -> AppResult<Option<String>> {
+    let path: Option<String> =
+        sqlx::query_scalar("SELECT abs_path FROM projects WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&state().db)
+            .await?;
+    let Some(path) = path else { return Ok(None) };
+    for fname in ["CHANGELOG.md", "Changelog.md", "changelog.md", "CHANGES.md", "HISTORY.md"] {
+        let p = Path::new(&path).join(fname);
+        if p.exists() {
+            if let Ok(s) = std::fs::read_to_string(&p) {
+                return Ok(Some(s));
+            }
+        }
+    }
+    Ok(None)
+}
+
+// ---------- Open-in-browser: detect a dev URL ----------
+
+#[derive(Debug, Serialize)]
+pub struct DetectedUrl {
+    pub url: String,
+    pub source: String,
+}
+
+#[tauri::command]
+pub async fn project_dev_url(id: i64) -> AppResult<Option<DetectedUrl>> {
+    let path: Option<String> =
+        sqlx::query_scalar("SELECT abs_path FROM projects WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&state().db)
+            .await?;
+    let Some(path) = path else { return Ok(None) };
+    let p = Path::new(&path);
+
+    // 1. package.json scripts → look for --port <NUM> in any script
+    let pkg = p.join("package.json");
+    if let Ok(text) = std::fs::read_to_string(&pkg) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(scripts) = v.get("scripts").and_then(|s| s.as_object()) {
+                let re = regex::Regex::new(r"--port[= ](\d{2,5})").unwrap();
+                for (name, val) in scripts.iter() {
+                    let Some(cmd) = val.as_str() else { continue };
+                    if let Some(caps) = re.captures(cmd) {
+                        let port = &caps[1];
+                        return Ok(Some(DetectedUrl {
+                            url: format!("http://localhost:{port}"),
+                            source: format!("package.json:scripts.{name}"),
+                        }));
+                    }
+                }
+                // No explicit port — fall back to framework defaults.
+                let has = |needle: &str| {
+                    scripts
+                        .values()
+                        .any(|v| v.as_str().is_some_and(|s| s.contains(needle)))
+                };
+                if has("vite") {
+                    return Ok(Some(DetectedUrl {
+                        url: "http://localhost:5173".into(),
+                        source: "package.json (vite default)".into(),
+                    }));
+                }
+                if has("next") {
+                    return Ok(Some(DetectedUrl {
+                        url: "http://localhost:3000".into(),
+                        source: "package.json (next.js default)".into(),
+                    }));
+                }
+                if has("svelte-kit") || has("vite") {
+                    return Ok(Some(DetectedUrl {
+                        url: "http://localhost:5173".into(),
+                        source: "package.json (sveltekit default)".into(),
+                    }));
+                }
+                if has("astro") {
+                    return Ok(Some(DetectedUrl {
+                        url: "http://localhost:4321".into(),
+                        source: "package.json (astro default)".into(),
+                    }));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+// ---------- Custom icon override ----------
+
+#[tauri::command]
+pub async fn set_project_icon(id: i64, slug: Option<String>) -> AppResult<()> {
+    sqlx::query("UPDATE projects SET custom_icon_slug = ? WHERE id = ?")
+        .bind(&slug)
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
+// ---------- Quick stats (LOC, file count) ----------
+
+#[tauri::command]
+pub async fn project_stats(id: i64) -> AppResult<stats::ProjectStats> {
+    let path: String = sqlx::query_scalar("SELECT abs_path FROM projects WHERE id = ?")
+        .bind(id)
+        .fetch_one(&state().db)
+        .await?;
+    let root = std::path::PathBuf::from(path);
+    let s = root.clone();
+    // CPU-bound walk — push off the async runtime.
+    tauri::async_runtime::spawn_blocking(move || stats::compute(&s))
+        .await
+        .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?
+}
+
+// ---------- Backup / restore ----------
+
+#[derive(Debug, Serialize)]
+pub struct BackupResult {
+    pub dest: String,
+    pub bytes: u64,
+}
+
+#[tauri::command]
+pub async fn backup_db(dest: String) -> AppResult<BackupResult> {
+    let db_path = state().data_dir.join("db.sqlite");
+    if !db_path.exists() {
+        return Err(AppError::NotFound("db.sqlite missing".into()));
+    }
+    // Flush WAL so the copy is consistent.
+    let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&state().db)
+        .await;
+    let bytes = std::fs::copy(&db_path, &dest)?;
+    Ok(BackupResult { dest, bytes })
+}
+
+#[tauri::command]
+pub async fn restore_db(src: String) -> AppResult<u64> {
+    let src_path = std::path::PathBuf::from(&src);
+    if !src_path.exists() {
+        return Err(AppError::NotFound(format!("source missing: {src}")));
+    }
+    let db_path = state().data_dir.join("db.sqlite");
+    // Best effort: overwrite the db file. The app's existing pool will
+    // see stale data until restart — surface that to the user in the UI.
+    let bytes = std::fs::copy(&src_path, &db_path)?;
+    Ok(bytes)
+}
+
+// ---------- Action chains ----------
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ActionChainRow {
+    pub id: i64,
+    pub project_id: i64,
+    pub label: String,
+    pub steps_json: String,
+    pub kind: String,
+    pub sort_order: i64,
+}
+
+#[derive(Deserialize)]
+pub struct ChainStep {
+    pub command: String,
+    pub working_dir: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpsertChainArgs {
+    pub id: Option<i64>,
+    pub project_id: i64,
+    pub label: String,
+    pub kind: String,
+    pub steps: Vec<ChainStep>,
+}
+
+#[tauri::command]
+pub async fn upsert_action_chain(args: UpsertChainArgs) -> AppResult<i64> {
+    let steps_json = serde_json::to_string(&args.steps.iter().map(|s| {
+        serde_json::json!({"command": s.command, "working_dir": s.working_dir})
+    }).collect::<Vec<_>>())?;
+    if let Some(id) = args.id {
+        sqlx::query(
+            "UPDATE action_chains SET label = ?, kind = ?, steps_json = ? WHERE id = ?",
+        )
+        .bind(&args.label)
+        .bind(&args.kind)
+        .bind(&steps_json)
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+        Ok(id)
+    } else {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO action_chains (project_id, label, kind, steps_json) VALUES (?, ?, ?, ?) RETURNING id",
+        )
+        .bind(args.project_id)
+        .bind(&args.label)
+        .bind(&args.kind)
+        .bind(&steps_json)
+        .fetch_one(&state().db)
+        .await?;
+        Ok(id)
+    }
+}
+
+#[tauri::command]
+pub async fn list_action_chains(project_id: i64) -> AppResult<Vec<ActionChainRow>> {
+    let rows = sqlx::query_as::<_, ActionChainRow>(
+        "SELECT id, project_id, label, steps_json, kind, sort_order FROM action_chains \
+         WHERE project_id = ? ORDER BY sort_order, id",
+    )
+    .bind(project_id)
+    .fetch_all(&state().db)
+    .await?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub async fn delete_action_chain(id: i64) -> AppResult<()> {
+    sqlx::query("DELETE FROM action_chains WHERE id = ?")
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn run_action_chain(id: i64) -> AppResult<()> {
+    let row: ActionChainRow = sqlx::query_as(
+        "SELECT id, project_id, label, steps_json, kind, sort_order FROM action_chains WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_one(&state().db)
+    .await?;
+    let steps: Vec<serde_json::Value> = serde_json::from_str(&row.steps_json)?;
+    let project_path: String = sqlx::query_scalar("SELECT abs_path FROM projects WHERE id = ?")
+        .bind(row.project_id)
+        .fetch_one(&state().db)
+        .await?;
+    // Join steps with &&; spawn once in a single terminal.
+    let joined = steps
+        .iter()
+        .map(|s| s["command"].as_str().unwrap_or(""))
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ; ");
+    runner::spawn_external(
+        std::path::Path::new(&project_path),
+        &joined,
+        runner::TerminalChoice::Auto,
+    )?;
+    Ok(())
+}
+
+// ---------- Action editor overrides ----------
+
+#[derive(Deserialize)]
+pub struct UpsertActionArgs {
+    pub id: Option<i64>,
+    pub project_id: i64,
+    pub label: String,
+    pub command: String,
+    pub working_dir: Option<String>,
+    pub kind: String,
+}
+
+#[tauri::command]
+pub async fn upsert_action(args: UpsertActionArgs) -> AppResult<i64> {
+    if let Some(id) = args.id {
+        sqlx::query(
+            "UPDATE project_actions SET label = ?, command = ?, working_dir = ?, kind = ?, \
+                                        is_user_override = 1 WHERE id = ?",
+        )
+        .bind(&args.label)
+        .bind(&args.command)
+        .bind(&args.working_dir)
+        .bind(&args.kind)
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+        Ok(id)
+    } else {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO project_actions (project_id, label, command, working_dir, source, kind, is_user_override, sort_order) \
+             VALUES (?, ?, ?, ?, 'user', ?, 1, 50) RETURNING id",
+        )
+        .bind(args.project_id)
+        .bind(&args.label)
+        .bind(&args.command)
+        .bind(&args.working_dir)
+        .bind(&args.kind)
+        .fetch_one(&state().db)
+        .await?;
+        Ok(id)
+    }
+}
+
+#[tauri::command]
+pub async fn delete_action(id: i64) -> AppResult<()> {
+    sqlx::query("DELETE FROM project_actions WHERE id = ?")
+        .bind(id)
+        .execute(&state().db)
+        .await?;
+    Ok(())
+}
+
 // ---------- GitHub clone & import ----------
 
 #[derive(Deserialize)]
@@ -577,6 +898,8 @@ pub async fn clone_repo(args: CloneRepoArgs) -> AppResult<CloneResult> {
         pinned: row.pinned,
         last_opened_at: row.last_opened_at,
         last_scanned_at: row.last_scanned_at,
+        custom_icon_slug: row.custom_icon_slug,
+        sort_order: row.sort_order,
     };
 
     Ok(CloneResult {

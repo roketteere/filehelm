@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Code2,
   FolderOpen,
+  Globe,
   Pin,
   PinOff,
   Play,
@@ -22,10 +23,14 @@ import { LanguageIcon } from "@/components/LanguageIcon";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { GitPanel } from "@/components/GitPanel";
+import { StatsPanel } from "@/components/StatsPanel";
+import { IconOverridePopover } from "@/components/IconOverridePopover";
+import { ActionEditor } from "@/components/ActionEditor";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { ipc } from "@/lib/ipc";
 import { cn, formatRelative } from "@/lib/utils";
 import { labelFor } from "@/lib/devicon-map";
-import type { Project, ProjectAction } from "@/types";
+import type { DetectedUrl, Project, ProjectAction } from "@/types";
 
 interface Props {
   project: Project;
@@ -36,18 +41,28 @@ interface Props {
 export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
   const [actions, setActions] = useState<ProjectAction[]>([]);
   const [readme, setReadme] = useState<string | null>(null);
+  const [changelog, setChangelog] = useState<string | null>(null);
+  const [devUrl, setDevUrl] = useState<DetectedUrl | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([ipc.projectActions(project.id), ipc.projectReadme(project.id)])
-      .then(([a, r]) => {
+    Promise.all([
+      ipc.projectActions(project.id),
+      ipc.projectReadme(project.id),
+      ipc.projectChangelog(project.id),
+      ipc.projectDevUrl(project.id),
+    ])
+      .then(([a, r, c, u]) => {
         if (cancelled) return;
         setActions(a);
         setReadme(r);
+        setChangelog(c);
+        setDevUrl(u);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -60,6 +75,15 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
       cancelled = true;
     };
   }, [project.id]);
+
+  const reloadActions = async () => {
+    try {
+      const a = await ipc.projectActions(project.id);
+      setActions(a);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
 
   const runAction = async (a: ProjectAction) => {
     setError(null);
@@ -94,14 +118,11 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
       <header className="flex items-start justify-between gap-4 px-6 pt-6 pb-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            {project.badges.slice(0, 1).map((b, i) => (
-              <LanguageIcon
-                key={i}
-                slug={b.value}
-                size={28}
-                className="drop-shadow-[0_0_8px_hsl(var(--ring)/0.25)]"
-              />
-            ))}
+            <LanguageIcon
+              slug={project.custom_icon_slug ?? project.badges[0]?.value ?? "git"}
+              size={28}
+              className="drop-shadow-[0_0_8px_hsl(var(--ring)/0.25)]"
+            />
             <h1 className="truncate text-2xl font-semibold tracking-tight">
               {project.name}
             </h1>
@@ -188,9 +209,32 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
             </TooltipTrigger>
             <TooltipContent>{project.pinned ? "Unpin" : "Pin"}</TooltipContent>
           </Tooltip>
+          {devUrl && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => openUrl(devUrl.url).catch((e: unknown) => setError(String(e)))}
+                  aria-label="Open in browser"
+                >
+                  <Globe />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open {devUrl.url}</TooltipContent>
+            </Tooltip>
+          )}
+          <IconOverridePopover
+            projectId={project.id}
+            current={project.custom_icon_slug ?? null}
+            onChanged={() => onPinChanged?.()}
+          />
           <Separator orientation="vertical" className="mx-1 h-7" />
           <Button variant="ghost" size="sm" onClick={rescan} disabled={loading}>
             <RefreshCcw className={cn(loading && "animate-spin")} /> Rescan
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setEditorOpen(true)}>
+            Edit actions
           </Button>
         </div>
       </header>
@@ -210,7 +254,9 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
               Actions {actions.length > 0 && <span className="ml-1 text-muted-foreground">({actions.length})</span>}
             </TabsTrigger>
             <TabsTrigger value="readme">README</TabsTrigger>
+            {changelog && <TabsTrigger value="changelog">Changelog</TabsTrigger>}
             <TabsTrigger value="git">Git</TabsTrigger>
+            <TabsTrigger value="stats">Stats</TabsTrigger>
           </TabsList>
         </div>
 
@@ -271,10 +317,28 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
           <MarkdownPreview source={readme} />
         </TabsContent>
 
+        {changelog && (
+          <TabsContent value="changelog" className="m-0 flex-1 overflow-hidden">
+            <MarkdownPreview source={changelog} emptyHint="No CHANGELOG.md / CHANGES.md / HISTORY.md found." />
+          </TabsContent>
+        )}
+
         <TabsContent value="git" className="m-0 flex-1 overflow-hidden">
           <GitPanel projectId={project.id} />
         </TabsContent>
+
+        <TabsContent value="stats" className="m-0 flex-1 overflow-hidden">
+          <StatsPanel projectId={project.id} />
+        </TabsContent>
       </Tabs>
+
+      <ActionEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        project={project}
+        actions={actions}
+        onChanged={reloadActions}
+      />
     </div>
   );
 }
