@@ -18,14 +18,16 @@ export default defineConfig({
 
   clearScreen: false,
   server: {
-    port: 1420,
+    // Unique per-app port so filehelm coexists with paliaplay overlay
+    // (1420), taskmgr_TauriRust (1420), lobegui (5183), teki-bridge
+    // (5174), and others. tauri.conf.json's devUrl must stay in sync.
+    port: 5191,
     strictPort: true,
     host: host || false,
     hmr: host
-      ? { protocol: "ws", host, port: 1421 }
+      ? { protocol: "ws", host, port: 5192 }
       : undefined,
     watch: {
-      // Tauri rebuilds the Rust side itself; ignore noisy paths.
       ignored: ["**/src-tauri/**"],
     },
   },
