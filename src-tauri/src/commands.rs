@@ -1002,6 +1002,34 @@ pub async fn fs_home() -> AppResult<String> {
 }
 
 #[tauri::command]
+pub async fn fs_rename(src: String, new_name: String) -> AppResult<String> {
+    let r = fs_ops::rename(std::path::Path::new(&src), &new_name)?;
+    Ok(r.to_string_lossy().into_owned())
+}
+
+#[derive(Deserialize)]
+pub struct FsZipArgs {
+    pub sources: Vec<String>,
+    pub dest_zip: String,
+}
+
+#[tauri::command]
+pub async fn fs_zip(args: FsZipArgs) -> AppResult<u64> {
+    let sources: Vec<std::path::PathBuf> =
+        args.sources.iter().map(std::path::PathBuf::from).collect();
+    let dest = std::path::PathBuf::from(args.dest_zip);
+    fs_ops::zip_paths(&sources, &dest)
+}
+
+#[tauri::command]
+pub async fn fs_unzip(src_zip: String, dest_dir: String) -> AppResult<u64> {
+    fs_ops::unzip_to(
+        std::path::Path::new(&src_zip),
+        std::path::Path::new(&dest_dir),
+    )
+}
+
+#[tauri::command]
 pub async fn search_projects(
     query: String,
     max_hits: u32,

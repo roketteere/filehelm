@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderCog, Github, RefreshCcw, Loader2, Anchor, Settings } from "lucide-react";
+import { FolderCog, Github, RefreshCcw, Loader2, Anchor, Settings, Files } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -49,6 +49,9 @@ export default function App() {
   const [themeOpen, setThemeOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  // Track in a ref too so the header button + keybind handler agree.
+  const setFilesOpenRef = useRef(setFilesOpen);
+  setFilesOpenRef.current = setFilesOpen;
   const [scanning, setScanning] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
@@ -262,6 +265,7 @@ export default function App() {
           onOpenRoots={() => setRootsOpen(true)}
           onOpenGithub={() => setGithubOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenFiles={() => setFilesOpen(true)}
           themeOpen={themeOpen}
           onThemeOpenChange={setThemeOpen}
         />
@@ -381,6 +385,7 @@ function Header({
   onOpenRoots,
   onOpenGithub,
   onOpenSettings,
+  onOpenFiles,
   themeOpen,
   onThemeOpenChange,
 }: {
@@ -391,6 +396,7 @@ function Header({
   onOpenRoots: () => void;
   onOpenGithub: () => void;
   onOpenSettings: () => void;
+  onOpenFiles: () => void;
   themeOpen: boolean;
   onThemeOpenChange: (v: boolean) => void;
 }) {
@@ -415,9 +421,18 @@ function Header({
       <div className="flex items-center gap-2">
         <SortPicker />
         <ThemePicker open={themeOpen} onOpenChange={onThemeOpenChange} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onOpenFiles}
+          title="File commander (Ctrl+Shift+E)"
+        >
+          <Files />
+          <span className="hidden lg:inline">Commander</span>
+        </Button>
         <Button variant="outline" size="sm" onClick={onOpenGithub}>
           <Github />
-          <span className="hidden md:inline">Clone from GitHub</span>
+          <span className="hidden lg:inline">Clone from GitHub</span>
         </Button>
         <Button variant="outline" size="sm" onClick={onScanAll} disabled={scanning || rootsCount === 0}>
           {scanning ? <Loader2 className="animate-spin" /> : <RefreshCcw />}

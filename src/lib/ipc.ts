@@ -160,4 +160,10 @@ export const ipc = {
     invoke<string>("fs_mkdir", { parent, name }),
   fsDelete: (path: string) => invoke<void>("fs_delete", { path }),
   fsHome: () => invoke<string>("fs_home"),
+  fsRename: (src: string, newName: string) =>
+    invoke<string>("fs_rename", { src, newName }),
+  fsZip: (sources: string[], destZip: string) =>
+    invoke<number>("fs_zip", { args: { sources, dest_zip: destZip } }),
+  fsUnzip: (srcZip: string, destDir: string) =>
+    invoke<number>("fs_unzip", { srcZip, destDir }),
 };

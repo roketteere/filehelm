@@ -145,6 +145,159 @@ pub fn home_dir() -> AppResult<PathBuf> {
     dirs::home_dir().ok_or_else(|| AppError::Other(anyhow::anyhow!("no home directory")))
 }
 
+/// Rename `src` to a sibling with name `new_name` inside the same
+/// parent directory. Refuses path separators and refuses to overwrite.
+pub fn rename(src: &Path, new_name: &str) -> AppResult<PathBuf> {
+    if new_name.contains('\\') || new_name.contains('/') {
+        return Err(AppError::Invalid(
+            "new name cannot contain path separators".into(),
+        ));
+    }
+    if new_name.is_empty() {
+        return Err(AppError::Invalid("new name cannot be empty".into()));
+    }
+    let parent = src
+        .parent()
+        .ok_or_else(|| AppError::Invalid("source has no parent".into()))?;
+    let dest = parent.join(new_name);
+    if dest.exists() {
+        return Err(AppError::Invalid(format!(
+            "destination already exists: {}",
+            dest.display()
+        )));
+    }
+    std::fs::rename(src, &dest)?;
+    Ok(dest)
+}
+
+/// Zip one or more paths (files and/or directories) into `dest_zip`.
+/// Directories are stored recursively; each top-level entry keeps its
+/// own name as the in-archive root.
+pub fn zip_paths(sources: &[PathBuf], dest_zip: &Path) -> AppResult<u64> {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    if sources.is_empty() {
+        return Err(AppError::Invalid("nothing to zip".into()));
+    }
+    if dest_zip.exists() {
+        return Err(AppError::Invalid(format!(
+            "destination already exists: {}",
+            dest_zip.display()
+        )));
+    }
+    let file = std::fs::File::create(dest_zip)?;
+    let mut writer = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    let mut total = 0u64;
+    for src in sources {
+        if !src.exists() {
+            return Err(AppError::Invalid(format!(
+                "source does not exist: {}",
+                src.display()
+            )));
+        }
+        let name = src
+            .file_name()
+            .ok_or_else(|| AppError::Invalid("source has no file name".into()))?
+            .to_string_lossy()
+            .into_owned();
+        if src.is_dir() {
+            add_dir_recursive(&mut writer, src, &name, options, &mut total)?;
+        } else {
+            writer
+                .start_file(&name, options)
+                .map_err(|e| AppError::Other(anyhow::anyhow!("zip start_file: {e}")))?;
+            let bytes = std::fs::read(src)?;
+            writer.write_all(&bytes)?;
+            total += bytes.len() as u64;
+        }
+    }
+    writer
+        .finish()
+        .map_err(|e| AppError::Other(anyhow::anyhow!("zip finish: {e}")))?;
+    Ok(total)
+}
+
+fn add_dir_recursive<W: std::io::Write + std::io::Seek>(
+    writer: &mut zip::ZipWriter<W>,
+    src_dir: &Path,
+    prefix: &str,
+    options: zip::write::SimpleFileOptions,
+    total: &mut u64,
+) -> AppResult<()> {
+    use std::io::Write;
+    writer
+        .add_directory(format!("{prefix}/"), options)
+        .map_err(|e| AppError::Other(anyhow::anyhow!("zip add_directory: {e}")))?;
+    for entry in std::fs::read_dir(src_dir)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let p = entry.path();
+        let in_zip = format!("{prefix}/{name}");
+        if p.is_dir() {
+            add_dir_recursive(writer, &p, &in_zip, options, total)?;
+        } else {
+            writer
+                .start_file(&in_zip, options)
+                .map_err(|e| AppError::Other(anyhow::anyhow!("zip start_file: {e}")))?;
+            let bytes = std::fs::read(&p)?;
+            writer.write_all(&bytes)?;
+            *total += bytes.len() as u64;
+        }
+    }
+    Ok(())
+}
+
+/// Extract `src_zip` into `dest_dir`. Zip-slip guard: skips any entry
+/// whose path would escape the destination root.
+pub fn unzip_to(src_zip: &Path, dest_dir: &Path) -> AppResult<u64> {
+    use std::io::Read;
+
+    if !src_zip.is_file() {
+        return Err(AppError::Invalid(format!(
+            "not a file: {}",
+            src_zip.display()
+        )));
+    }
+    std::fs::create_dir_all(dest_dir)?;
+    let dest_canon = dest_dir
+        .canonicalize()
+        .unwrap_or_else(|_| dest_dir.to_path_buf());
+    let file = std::fs::File::open(src_zip)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| AppError::Other(anyhow::anyhow!("zip open: {e}")))?;
+    let mut extracted_bytes = 0u64;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| AppError::Other(anyhow::anyhow!("zip entry {i}: {e}")))?;
+        let Some(rel) = entry.enclosed_name() else {
+            continue;
+        };
+        let out_path = dest_canon.join(rel);
+        if !out_path.starts_with(&dest_canon) {
+            continue;
+        }
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out_path)?;
+            continue;
+        }
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut out = std::fs::File::create(&out_path)?;
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        entry.read_to_end(&mut buf)?;
+        std::io::Write::write_all(&mut out, &buf)?;
+        extracted_bytes += buf.len() as u64;
+    }
+    Ok(extracted_bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

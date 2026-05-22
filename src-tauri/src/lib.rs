@@ -173,6 +173,9 @@ pub fn run() {
             commands::fs_mkdir,
             commands::fs_delete,
             commands::fs_home,
+            commands::fs_rename,
+            commands::fs_zip,
+            commands::fs_unzip,
             commands::kill_external_launch,
             commands::list_external_launches,
         ])
