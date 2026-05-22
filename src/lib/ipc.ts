@@ -54,6 +54,10 @@ export const ipc = {
   openInExplorer: (projectId: number) =>
     invoke<void>("open_in_explorer", { projectId }),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
+  openPathInEditor: (path: string) =>
+    invoke<void>("open_path_in_editor", { path }),
+  openPathExternal: (path: string) =>
+    invoke<void>("open_path_external", { path }),
 
   // GitHub clone & import
   cloneRepo: (url: string, dest: string) =>

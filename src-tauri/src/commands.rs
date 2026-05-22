@@ -393,6 +393,52 @@ pub async fn open_in_editor(project_id: i64) -> AppResult<()> {
     Ok(())
 }
 
+/// Open an arbitrary file or directory in the user's editor (VS Code by
+/// default). Used by the file commander's F4 / Edit affordance so users
+/// get VS Code specifically, not whatever the OS associates with the
+/// extension.
+#[tauri::command]
+pub fn open_path_in_editor(path: String) -> AppResult<()> {
+    runner::open_editor(Path::new(&path))
+}
+
+/// Open an arbitrary file with the OS's default application — Windows
+/// shell-association, `open` on macOS, `xdg-open` on Linux. Used by
+/// the file commander's F3 / View affordance and the
+/// double-click-a-file path so users get whatever they expect for the
+/// file type (browser for .html, image viewer for .png, etc.).
+#[tauri::command]
+pub fn open_path_external(path: String) -> AppResult<()> {
+    use std::process::Command;
+    #[cfg(target_os = "windows")]
+    {
+        // `cmd /C start "" <path>` is the canonical Windows way to
+        // hand off to shell association. Empty quoted title prevents
+        // `start` from treating the path as a window title.
+        Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(crate::error::AppError::Io)?;
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(crate::error::AppError::Io)?;
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(crate::error::AppError::Io)?;
+        Ok(())
+    }
+}
+
 #[tauri::command]
 pub async fn open_terminal_here(project_id: i64) -> AppResult<()> {
     let path: String = sqlx::query_scalar("SELECT abs_path FROM projects WHERE id = ?")

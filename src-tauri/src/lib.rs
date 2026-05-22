@@ -143,6 +143,8 @@ pub fn run() {
             commands::project_readme,
             commands::run_action,
             commands::open_in_editor,
+            commands::open_path_in_editor,
+            commands::open_path_external,
             commands::open_terminal_here,
             commands::open_in_explorer,
             commands::reveal_path,

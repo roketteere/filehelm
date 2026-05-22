@@ -44,7 +44,12 @@ import { ipc } from "@/lib/ipc";
 import { splitPath } from "@/lib/path";
 import { joinPath, revealLabel } from "@/lib/platform";
 import { cn, formatRelative } from "@/lib/utils";
-import { openPath } from "@tauri-apps/plugin-opener";
+// File launches go through backend Tauri commands (ipc.openPathExternal
+// / ipc.openPathInEditor) instead of @tauri-apps/plugin-opener.openPath
+// — the opener plugin requires per-call capability scope on the v2
+// allow-list, and routing through Rust gives us per-OS branches
+// (Windows shell-association, macOS `open`, Linux `xdg-open`) plus
+// a distinct VS-Code-only path for F4 / Edit.
 import type { DirEntry } from "@/types";
 
 interface Props {
@@ -175,13 +180,12 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
     async (side: Side, entry: DirEntry) => {
       if (entry.is_dir) {
         await refreshPane(side, entry.path);
-      } else {
-        // Open file in the OS default app.
-        try {
-          await openPath(entry.path);
-        } catch (e) {
-          setError(String(e));
-        }
+        return;
+      }
+      try {
+        await ipc.openPathExternal(entry.path);
+      } catch (e) {
+        setError(`Failed to open "${entry.name}": ${e}`);
       }
     },
     [refreshPane],
@@ -309,28 +313,41 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
 
   const opView = async () => {
     const items = targets();
-    if (items.length !== 1) return;
+    if (items.length !== 1) {
+      setError(
+        items.length === 0
+          ? "Select a file to view."
+          : "View one file at a time.",
+      );
+      return;
+    }
     const entry = items[0];
     if (entry.is_dir) {
+      // For folders, "View" descends into the pane.
       await refreshPane(active, entry.path);
-    } else {
-      try {
-        await openPath(entry.path);
-      } catch (e) {
-        setError(String(e));
-      }
+      return;
+    }
+    try {
+      await ipc.openPathExternal(entry.path);
+    } catch (e) {
+      setError(`Failed to open "${entry.name}": ${e}`);
     }
   };
 
   const opEdit = async () => {
     const items = targets();
-    if (items.length !== 1) return;
-    // Best effort: shell out to `code` via the opener. If VS Code
-    // isn't on PATH the user will see an error.
+    if (items.length !== 1) {
+      setError(
+        items.length === 0
+          ? "Select a file to edit."
+          : "Edit one file at a time.",
+      );
+      return;
+    }
     try {
-      await openPath(items[0].path);
+      await ipc.openPathInEditor(items[0].path);
     } catch (e) {
-      setError(String(e));
+      setError(`Failed to open "${items[0].name}" in editor: ${e}`);
     }
   };
 
@@ -583,7 +600,8 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
                   mkdir: opMkdir,
                   reveal: (p) => ipc.revealPath(p).catch(() => {}),
                   copyPath: (p) => navigator.clipboard.writeText(p).catch(() => {}),
-                  openHere: (p) => openPath(p).catch(() => {}),
+                  openHere: (p) =>
+                    ipc.openPathExternal(p).catch((e) => setError(String(e))),
                   swap: () => {
                     const lcwd = left.cwd;
                     const rcwd = right.cwd;
