@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { LanguageIcon } from "@/components/LanguageIcon";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { ipc } from "@/lib/ipc";
 import { cn, formatRelative } from "@/lib/utils";
 import { labelFor } from "@/lib/devicon-map";
@@ -101,9 +102,13 @@ export function ProjectDetail({ project, onRescanned }: Props) {
               {project.name}
             </h1>
           </div>
-          <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-            {project.abs_path}
-          </div>
+          <Breadcrumb
+            className="mt-1.5"
+            path={project.abs_path}
+            onSegmentClick={(absPath) => {
+              ipc.revealPath(absPath).catch((e) => setError(String(e)));
+            }}
+          />
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {project.badges.map((b, i) => (
               <Tooltip key={`${b.kind}-${b.value}-${i}`}>

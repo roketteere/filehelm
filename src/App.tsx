@@ -90,6 +90,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1">
           <aside className="w-[320px] shrink-0 border-r border-border bg-card/40">
             <ProjectList
+              roots={roots}
               projects={projects}
               selectedId={selectedId}
               onSelect={(p) => setSelectedId(p.id)}
@@ -120,6 +121,7 @@ export default function App() {
         open={rootsOpen}
         onOpenChange={setRootsOpen}
         roots={roots}
+        projects={projects}
         onRootsChanged={rootsChanged}
       />
     </TooltipProvider>

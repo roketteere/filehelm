@@ -13,16 +13,27 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ipc } from "@/lib/ipc";
 import { formatRelative } from "@/lib/utils";
-import type { Root, ScanReport } from "@/types";
+import type { Project, Root, ScanReport } from "@/types";
 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   roots: Root[];
+  projects?: Project[];
   onRootsChanged: () => Promise<void>;
 }
 
-export function RootsConfig({ open, onOpenChange, roots, onRootsChanged }: Props) {
+export function RootsConfig({
+  open,
+  onOpenChange,
+  roots,
+  projects = [],
+  onRootsChanged,
+}: Props) {
+  const projectCount = projects.reduce<Record<number, number>>((acc, p) => {
+    acc[p.root_id] = (acc[p.root_id] ?? 0) + 1;
+    return acc;
+  }, {});
   const [working, setWorking] = useState<number | "add" | null>(null);
   const [lastReport, setLastReport] = useState<{ rootId: number; report: ScanReport } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +125,16 @@ export function RootsConfig({ open, onOpenChange, roots, onRootsChanged }: Props
                 className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-xs">{r.abs_path}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="truncate font-mono text-xs">{r.abs_path}</div>
+                    <span
+                      className="shrink-0 rounded-full bg-helm-500/15 px-1.5 py-0.5 text-[10px] font-medium text-helm-300"
+                      title="Projects detected under this root"
+                    >
+                      {projectCount[r.id] ?? 0} project
+                      {(projectCount[r.id] ?? 0) === 1 ? "" : "s"}
+                    </span>
+                  </div>
                   <div className="text-[11px] text-muted-foreground">
                     added {formatRelative(r.added_at)}
                     {lastReport?.rootId === r.id && (
