@@ -620,21 +620,11 @@ function ProjectRow({
         draggable && "cursor-grab active:cursor-grabbing",
       )}
     >
-      <div className="flex shrink-0 items-center -space-x-1">
-        {badges.map((b, idx) => (
-          <span
-            key={`${b.kind}:${b.value}:${idx}`}
-            className="grid h-6 w-6 place-items-center rounded-full bg-card ring-1 ring-border"
-          >
-            <LanguageIcon slug={b.value} size={14} />
-          </span>
-        ))}
-      </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium">{project.name}</span>
           {project.pinned && (
-            <Pin className="h-3 w-3 text-primary" aria-label="pinned" />
+            <Pin className="h-3 w-3 shrink-0 text-primary" aria-label="pinned" />
           )}
         </div>
         <div className="flex items-center gap-1.5 truncate text-[10px] text-muted-foreground">
@@ -650,6 +640,16 @@ function ProjectRow({
           </span>
           <GitBadge projectId={project.id} compact className="ml-auto" />
         </div>
+      </div>
+      <div className="flex shrink-0 items-center -space-x-1">
+        {badges.map((b, idx) => (
+          <span
+            key={`${b.kind}:${b.value}:${idx}`}
+            className="grid h-6 w-6 place-items-center rounded-full bg-card ring-1 ring-border"
+          >
+            <LanguageIcon slug={b.value} size={14} />
+          </span>
+        ))}
       </div>
     </button>
   );
