@@ -162,8 +162,57 @@ fn guess_kind(section: &str, command: &str) -> ActionKind {
 fn trim_to_label(cmd: &str) -> String {
     let max = 60;
     if cmd.len() <= max {
-        cmd.to_string()
-    } else {
-        format!("{}…", &cmd[..max])
+        return cmd.to_string();
+    }
+    // `cmd.len()` is BYTE length; slicing `&cmd[..max]` panics if max
+    // falls inside a multi-byte UTF-8 codepoint (em-dashes, smart
+    // quotes, accented chars, etc. — all common in README prose).
+    // Walk char_indices to find the largest byte boundary at or below
+    // `max` so we never split a codepoint.
+    let cut = cmd
+        .char_indices()
+        .take_while(|(i, _)| *i <= max)
+        .last()
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    format!("{}…", &cmd[..cut])
+}
+
+#[cfg(test)]
+mod trim_to_label_tests {
+    use super::trim_to_label;
+
+    #[test]
+    fn passes_through_short_ascii() {
+        assert_eq!(trim_to_label("pnpm dev"), "pnpm dev");
+    }
+
+    #[test]
+    fn handles_em_dash_at_boundary() {
+        // 80-char command with an em-dash near the 60th BYTE.
+        // Regression test for v0.2.3 crash:
+        //   "end byte index 60 is not a char boundary;
+        //    it is inside '—' (bytes 59..62) of …"
+        let input = "pnpm typecheck          # astro check (needs tsconfig.json — Stage 1)";
+        let out = trim_to_label(input);
+        assert!(out.ends_with('…'));
+        // Must be valid UTF-8 (i.e. not panic during slicing).
+        assert!(out.is_char_boundary(out.len()));
+    }
+
+    #[test]
+    fn handles_multibyte_at_exact_max() {
+        // Crafted so the em-dash STARTS at byte 59 (max=60 is inside it).
+        let s = "0123456789012345678901234567890123456789012345678901234567—rest";
+        let out = trim_to_label(s);
+        // Slice should land BEFORE the em-dash, not panic.
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn pure_multibyte_string() {
+        let s = "—".repeat(40);
+        let out = trim_to_label(&s);
+        assert!(out.ends_with('…'));
     }
 }
