@@ -29,7 +29,7 @@ import { ipc } from "@/lib/ipc";
 import { prefs } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
-import { Download, Upload } from "lucide-react";
+import { Download, RefreshCw, Upload } from "lucide-react";
 
 // Inline-import the markdown so it ships in the bundle (same source of
 // truth as the in-repo docs/GUIDE.md). Vite's `?raw` suffix returns
@@ -221,6 +221,20 @@ function GeneralTab() {
       <Separator />
 
       <div>
+        <div className="mb-1 text-sm font-semibold">Check for updates</div>
+        <div className="mb-2 text-xs text-muted-foreground">
+          Polls the GitHub release endpoint baked into{" "}
+          <code>tauri.conf.json</code>. If a newer signed bundle is
+          available, you'll be prompted to download + install. First
+          release hasn't been cut yet, so today this will report
+          "up to date" or 404.
+        </div>
+        <UpdaterButton />
+      </div>
+
+      <Separator />
+
+      <div>
         <div className="mb-1 text-sm font-semibold">Reset all settings</div>
         <div className="mb-2 text-xs text-muted-foreground">
           Clears theme, keybinds, GitHub token, and any other FileHelm
@@ -232,6 +246,50 @@ function GeneralTab() {
           Reset all settings
         </Button>
       </div>
+    </div>
+  );
+}
+
+function UpdaterButton() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const run = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      // Dynamic import keeps the updater plugin (≈ 300 KB) out of the
+      // main bundle — only loaded when the user actually clicks check.
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      if (!update) {
+        setMsg("Already on the latest version.");
+        return;
+      }
+      const yes = window.confirm(
+        `Update available: v${update.version}\n\n${update.body ?? "No release notes."}\n\nDownload and install now? The app will relaunch.`,
+      );
+      if (!yes) return;
+      await update.downloadAndInstall();
+      setMsg("Update installed. Relaunching…");
+    } catch (e) {
+      setMsg(`Update check failed: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button variant="outline" size="sm" onClick={run} disabled={busy}>
+        {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+        Check for updates
+      </Button>
+      {msg && (
+        <div className="rounded border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground">
+          {msg}
+        </div>
+      )}
     </div>
   );
 }

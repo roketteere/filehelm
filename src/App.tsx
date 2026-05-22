@@ -1,25 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FolderCog, Github, RefreshCcw, Loader2, Anchor, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProjectList } from "@/components/ProjectList";
 import { ProjectDetail } from "@/components/ProjectDetail";
-import { RootsConfig } from "@/components/RootsConfig";
-import { GithubDialog } from "@/components/GithubDialog";
 import { ThemePicker } from "@/components/ThemePicker";
 import { TitleBar } from "@/components/TitleBar";
-import { SettingsDialog } from "@/components/SettingsDialog";
 import { SortPicker } from "@/components/SortPicker";
-import { SearchDialog } from "@/components/SearchDialog";
-import { Splash } from "@/components/Splash";
-import { FileCommander } from "@/components/FileCommander";
 import { applyStoredTheme } from "@/lib/theme";
 import { onAction, useKeybinds } from "@/lib/keybinds";
 import { ipc } from "@/lib/ipc";
 import { prefs } from "@/lib/prefs";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Project, Root } from "@/types";
+
+// ---- Code-split heavy dialogs ----
+// Each chunk loads on first open; until then the bundle stays lean.
+const RootsConfig = lazy(() =>
+  import("@/components/RootsConfig").then((m) => ({ default: m.RootsConfig })),
+);
+const GithubDialog = lazy(() =>
+  import("@/components/GithubDialog").then((m) => ({ default: m.GithubDialog })),
+);
+const SettingsDialog = lazy(() =>
+  import("@/components/SettingsDialog").then((m) => ({ default: m.SettingsDialog })),
+);
+const SearchDialog = lazy(() =>
+  import("@/components/SearchDialog").then((m) => ({ default: m.SearchDialog })),
+);
+const FileCommander = lazy(() =>
+  import("@/components/FileCommander").then((m) => ({ default: m.FileCommander })),
+);
+const Splash = lazy(() =>
+  import("@/components/Splash").then((m) => ({ default: m.Splash })),
+);
 
 // Apply persisted theme before React mounts so the first paint matches.
 applyStoredTheme();
@@ -307,46 +322,53 @@ export default function App() {
         </div>
       </div>
 
-      <RootsConfig
-        open={rootsOpen}
-        onOpenChange={setRootsOpen}
-        roots={roots}
-        projects={projects}
-        onRootsChanged={rootsChanged}
-      />
-
-      <GithubDialog
-        open={githubOpen}
-        onOpenChange={setGithubOpen}
-        defaultParent={roots[0]?.abs_path ?? null}
-        onCloned={async (p) => {
-          await refreshRoots();
-          await refreshProjects();
-          setSelectedId(p.id);
-        }}
-      />
-
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-
-      <SearchDialog
-        open={searchOpen}
-        onOpenChange={setSearchOpen}
-        onPick={(projectId) => {
-          if (projectId) setSelectedId(projectId);
-        }}
-      />
-
-      <Splash
-        projects={projects}
-        onPick={(p) => setSelectedId(p.id)}
-        onDismiss={() => {}}
-      />
-
-      <FileCommander
-        open={filesOpen}
-        onOpenChange={setFilesOpen}
-        initialPath={selected?.abs_path ?? null}
-      />
+      <Suspense fallback={null}>
+        {rootsOpen && (
+          <RootsConfig
+            open
+            onOpenChange={setRootsOpen}
+            roots={roots}
+            projects={projects}
+            onRootsChanged={rootsChanged}
+          />
+        )}
+        {githubOpen && (
+          <GithubDialog
+            open
+            onOpenChange={setGithubOpen}
+            defaultParent={roots[0]?.abs_path ?? null}
+            onCloned={async (p) => {
+              await refreshRoots();
+              await refreshProjects();
+              setSelectedId(p.id);
+            }}
+          />
+        )}
+        {settingsOpen && (
+          <SettingsDialog open onOpenChange={setSettingsOpen} />
+        )}
+        {searchOpen && (
+          <SearchDialog
+            open
+            onOpenChange={setSearchOpen}
+            onPick={(projectId) => {
+              if (projectId) setSelectedId(projectId);
+            }}
+          />
+        )}
+        {filesOpen && (
+          <FileCommander
+            open
+            onOpenChange={setFilesOpen}
+            initialPath={selected?.abs_path ?? null}
+          />
+        )}
+        <Splash
+          projects={projects}
+          onPick={(p) => setSelectedId(p.id)}
+          onDismiss={() => {}}
+        />
+      </Suspense>
     </TooltipProvider>
   );
 }

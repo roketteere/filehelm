@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import {
   Code2,
   FolderOpen,
@@ -23,11 +23,23 @@ import { LanguageIcon } from "@/components/LanguageIcon";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { GitPanel } from "@/components/GitPanel";
-import { StatsPanel } from "@/components/StatsPanel";
 import { IconOverridePopover } from "@/components/IconOverridePopover";
-import { ActionEditor } from "@/components/ActionEditor";
-import { EmbeddedTerminal } from "@/components/EmbeddedTerminal";
 import { openUrl } from "@tauri-apps/plugin-opener";
+
+// Lazy chunks — heavy or on-demand-only components keep the main
+// bundle lean. xterm.js (≈300 KB), the action editor + chains dialog,
+// and stats walker only load when the user actually opens them.
+const EmbeddedTerminal = lazy(() =>
+  import("@/components/EmbeddedTerminal").then((m) => ({
+    default: m.EmbeddedTerminal,
+  })),
+);
+const ActionEditor = lazy(() =>
+  import("@/components/ActionEditor").then((m) => ({ default: m.ActionEditor })),
+);
+const StatsPanel = lazy(() =>
+  import("@/components/StatsPanel").then((m) => ({ default: m.StatsPanel })),
+);
 import { ipc } from "@/lib/ipc";
 import { prefs } from "@/lib/prefs";
 import { cn, formatRelative } from "@/lib/utils";
@@ -349,17 +361,23 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
         </TabsContent>
 
         <TabsContent value="stats" className="m-0 flex-1 overflow-hidden">
-          <StatsPanel projectId={project.id} />
+          <Suspense fallback={<div className="grid h-full place-items-center text-muted-foreground">…</div>}>
+            <StatsPanel projectId={project.id} />
+          </Suspense>
         </TabsContent>
       </Tabs>
 
-      <ActionEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        project={project}
-        actions={actions}
-        onChanged={reloadActions}
-      />
+      {editorOpen && (
+        <Suspense fallback={null}>
+          <ActionEditor
+            open
+            onOpenChange={setEditorOpen}
+            project={project}
+            actions={actions}
+            onChanged={reloadActions}
+          />
+        </Suspense>
+      )}
 
       {embeddedSession && (
         <div className="fixed inset-x-0 bottom-0 z-30 flex h-72 flex-col border-t border-primary/40 bg-background shadow-2xl">
@@ -377,14 +395,16 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
             </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            <EmbeddedTerminal
-              sessionId={embeddedSession.id}
-              cwd={embeddedSession.cwd}
-              command={embeddedSession.command}
-              onExit={() => {
-                /* keep panel open so user can read the final output */
-              }}
-            />
+            <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">loading terminal…</div>}>
+              <EmbeddedTerminal
+                sessionId={embeddedSession.id}
+                cwd={embeddedSession.cwd}
+                command={embeddedSession.command}
+                onExit={() => {
+                  /* keep panel open so user can read the final output */
+                }}
+              />
+            </Suspense>
           </div>
         </div>
       )}

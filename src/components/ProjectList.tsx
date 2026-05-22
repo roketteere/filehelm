@@ -24,6 +24,7 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
   const [query, setQuery] = useState("");
   const [manualCollapsed, setManualCollapsed] = useState<Record<number, boolean>>({});
   const [sortMode, setSortMode] = useState<SortMode>(prefs.sortMode());
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
   useEffect(() => {
     const refresh = () => setSortMode(prefs.sortMode());
     window.addEventListener("filehelm:sortmode-changed", refresh);
@@ -148,10 +149,12 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
                         0 projects — scan this root from the Roots dialog.
                       </li>
                     ) : items.length === 0 ? null : (
-                      items.map((p) => (
+                      items.map((p) => {
+                        const dragEnabled = p.pinned && !isQueryActive && sortMode === "default";
+                        return (
                         <li
                           key={p.id}
-                          draggable={p.pinned && !isQueryActive && sortMode === "default"}
+                          draggable={dragEnabled}
                           onDragStart={(e) => {
                             e.dataTransfer.setData("text/plain", String(p.id));
                             e.dataTransfer.effectAllowed = "move";
@@ -160,13 +163,18 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
                             if (!p.pinned) return;
                             e.preventDefault();
                             e.dataTransfer.dropEffect = "move";
+                            setDragOverId(p.id);
                           }}
+                          onDragLeave={() => {
+                            if (dragOverId === p.id) setDragOverId(null);
+                          }}
+                          onDragEnd={() => setDragOverId(null)}
                           onDrop={async (e) => {
                             if (!p.pinned) return;
                             e.preventDefault();
+                            setDragOverId(null);
                             const draggedId = Number(e.dataTransfer.getData("text/plain"));
                             if (!draggedId || draggedId === p.id) return;
-                            // Swap sort_orders by re-numbering pinned-only.
                             const pinned = projects.filter((x) => x.pinned);
                             const fromIdx = pinned.findIndex((x) => x.id === draggedId);
                             const toIdx = pinned.findIndex((x) => x.id === p.id);
@@ -174,7 +182,6 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
                             const reordered = pinned.slice();
                             const [moved] = reordered.splice(fromIdx, 1);
                             reordered.splice(toIdx, 0, moved);
-                            // Write back monotonic sort orders 10, 20, 30…
                             await Promise.all(
                               reordered.map((pr, i) =>
                                 ipc.setProjectSortOrder(pr.id, (i + 1) * 10),
@@ -182,14 +189,21 @@ export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }
                             );
                             await onReorder?.();
                           }}
+                          className={cn(
+                            "relative transition-colors",
+                            dragOverId === p.id &&
+                              "before:absolute before:left-0 before:right-0 before:-top-0.5 before:h-0.5 before:rounded-full before:bg-primary before:shadow-[0_0_12px_hsl(var(--ring))]",
+                          )}
                         >
                           <ProjectRow
                             project={p}
                             selected={selectedId === p.id}
                             onClick={() => onSelect(p)}
+                            draggable={dragEnabled}
                           />
                         </li>
-                      ))
+                        );
+                      })
                     )}
                   </ul>
                 )}
@@ -316,10 +330,12 @@ function ProjectRow({
   project,
   selected,
   onClick,
+  draggable,
 }: {
   project: Project;
   selected: boolean;
   onClick: () => void;
+  draggable?: boolean;
 }) {
   const baseBadges = project.badges.length > 0
     ? project.badges.slice(0, 3)
@@ -336,6 +352,7 @@ function ProjectRow({
       className={cn(
         "group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60",
         selected && "bg-accent text-accent-foreground ring-1 ring-primary/40",
+        draggable && "cursor-grab active:cursor-grabbing",
       )}
     >
       <div className="flex shrink-0 items-center -space-x-1">
