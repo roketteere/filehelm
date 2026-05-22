@@ -155,12 +155,14 @@ export function ProjectList({
       </div>
 
 
-      <ScrollArea className="mt-2 flex-1">
-        {/* Extra pr-3 so row content (especially the right-side
-            language-icon stack) clears the 10px-wide vertical
-            scrollbar that sits absolute-right inside the
-            ScrollArea root. */}
-        <div className="pb-3 pl-2 pr-3">
+      <ScrollArea className="mt-2 flex-1" type="always">
+        {/* Reserved gutter: pr-4 (16px) so row content always clears
+            the 10px-wide vertical scrollbar that sits absolute-right
+            inside the ScrollArea root, with a 6px breathing gap. The
+            ScrollArea is type="always" so the scrollbar is rendered
+            even when content fits — no surprise reflow when items
+            cross the overflow threshold. */}
+        <div className="pb-3 pl-2 pr-4">
           {roots.length === 0 && projects.length === 0 && (
             <div className="px-3 py-8 text-center text-xs text-muted-foreground">
               No projects yet. Add a root directory and scan.
@@ -600,12 +602,19 @@ function ProjectRow({
     <button
       onClick={onClick}
       className={cn(
-        "group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60",
+        // CSS grid with strict columns so every row's icon stack
+        // ends at the same x regardless of badge count. Col 1 holds
+        // the name + meta block (truncatable), col 2 is the fixed-
+        // width icon stack (4.5rem = 72px = 3 × 20px + 2 × 6px gap +
+        // 2px breathing room).
+        "group grid w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors",
+        "grid-cols-[minmax(0,1fr)_4.5rem]",
+        "hover:bg-accent/60",
         selected && "bg-accent text-accent-foreground ring-1 ring-primary/40",
         draggable && "cursor-grab active:cursor-grabbing",
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium">{project.name}</span>
           {project.pinned && (
@@ -626,11 +635,11 @@ function ProjectRow({
           <GitBadge projectId={project.id} compact className="ml-auto" />
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1 pr-0.5">
+      <div className="flex items-center justify-end gap-1">
         {badges.map((b, idx) => (
           <span
             key={`${b.kind}:${b.value}:${idx}`}
-            className="grid h-5 w-5 place-items-center rounded-full bg-card ring-1 ring-border"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-card ring-1 ring-border"
           >
             <LanguageIcon slug={b.value} size={12} />
           </span>
