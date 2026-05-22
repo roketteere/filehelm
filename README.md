@@ -27,24 +27,43 @@ Built with **Tauri 2** + **Rust** + **Vite/React 18/TypeScript** +
 - **One-click launches** of every detected `package.json` script,
   `Cargo.toml` binary, `Makefile` target, `Justfile` recipe, plus
   shell commands extracted heuristically from README/CLAUDE.md
-  fenced blocks.
-- **Hierarchical project list** with collapsible per-root sections,
-  search across name/path/badges, language-icon stacks (via
-  `simple-icons` — accurate brand colors), git-style breadcrumbs in
-  the detail pane.
-- **GitHub explorer + clone-and-import**: paste a repo URL, preview
-  README & file tree without cloning, then `git clone` into your
-  chosen destination — the new project auto-imports into FileHelm
-  on success.
+  fenced blocks. Run in an external Windows Terminal **or** an
+  embedded xterm.js panel via ConPTY — toggle in Settings.
+- **Action editor + command chains** — override any detected action
+  or compose `pnpm install ; pnpm dev`-style multi-step chains that
+  run in a single terminal.
+- **Per-project Git tab** with branch switcher, dirty / ahead /
+  behind badges, recent-commits feed, Fetch / Pull buttons, plus a
+  unified diff viewer (Unstaged / Staged toggle, +/- tinting).
+- **Cross-project ripgrep search** (Ctrl+Shift+F) across every
+  configured root.
+- **Norton-style dual-pane file commander** (Ctrl+Shift+E) with
+  Tab/F5/F6/F7/F8 keybinds, cross-pane copy/move, breadcrumb
+  navigation per pane.
+- **GitHub explorer + clone-and-import** with live progress
+  streaming (per-line stderr from `git clone --progress` rendered
+  as an xterm-style log inside the dialog).
+- **Quick stats** per project: total files, lines, bytes, language
+  breakdown bar chart.
+- **Backup / restore** of `~/.filehelm/db.sqlite` via Settings.
+- **Custom icon override** per project (any simple-icons slug) +
+  CHANGELOG/CHANGES/HISTORY viewer tab + "Open in browser" button
+  when a dev URL is detected from package.json.
+- **Splash screen** with last-N opened projects + **system tray**
+  + **OS-global hotkey** (Ctrl+Alt+Space toggles window from
+  anywhere) + close-to-tray with runtime opt-out.
 - **8 hand-tuned themes** (Tokyo Night, Dracula, Catppuccin Mocha,
   Gruvbox Dark, Nord, Synthwave '84, GitHub Dark, Solarized Light)
   with per-theme SVG pattern overlays. Choice persists across runs.
 - **Custom keybinds** — every action rebindable from Settings →
   Keybinds. Vim-style nav (`j`/`k`/`Enter`) works out of the box.
-- **System tray** with single-click and double-click toggle. Close
-  button hides to tray rather than quitting.
+- **`helm` CLI companion** under `cli/` — `helm dev <name>` runs
+  the primary action from any terminal.
 - **In-app guide** at Settings → Guide (also lives in repo at
   `docs/GUIDE.md` — single source of truth).
+- **Tauri auto-updater scaffold** — plugin wired in; flip
+  `tauri.conf.json` `plugins.updater.active` to `true` and supply
+  endpoint+pubkey when there's a release source to update from.
 
 ---
 
@@ -104,6 +123,9 @@ All rebindable from **Settings → Keybinds** (Ctrl+,).
 | Open Roots dialog | `Ctrl+Shift+R` |
 | Open Theme picker | `Ctrl+T` |
 | Open Clone from GitHub | `Ctrl+Shift+G` |
+| Open cross-project search | `Ctrl+Shift+F` |
+| Open file commander | `Ctrl+Shift+E` |
+| Toggle window from anywhere (global) | `Ctrl+Alt+Space` |
 | Next / previous project | `↓` `↑` (or `j` `k`) |
 | Run primary action | `Enter` |
 | Close dialog / clear search | `Esc` |
@@ -167,10 +189,13 @@ SQLite file to also forget your roots and run history.
 | 1.8   | Frameless chrome + pink brand + system tray | shipped |
 | 1.9   | Custom keybinds + tree navigation + Settings + in-app Guide | shipped |
 | 2.0   | Git surface: status badges + commits + pull/fetch | shipped |
-| 2.1   | QoL: sort modes + pin + drag-drop + close-to-tray toggle + run history | shipped |
+| 2.1   | QoL: sort modes + pin + drag-drop folder + close-to-tray toggle + run history | shipped |
 | 2.2   | `helm` CLI companion (`cli/`) | shipped |
-| 2.x+  | Embedded PTY runner, OS-global hotkey, diff viewer, tags, workspaces, … | scoped-to-future |
-| 3     | Norton-style dual-pane file commander | scoped-to-future |
+| 2.3   | CHANGELOG viewer, open-in-browser, custom icon, stats, backup/restore, action editor + chains | shipped |
+| 2.4   | Splash screen, drag-reorder pinned, live clone progress, branch switcher, diff viewer, ripgrep search | shipped |
+| 2.5   | Embedded PTY runner (xterm.js + portable-pty / ConPTY) | shipped |
+| 2.6   | OS-global hotkey (Ctrl+Alt+Space) + Tauri auto-updater scaffold | shipped |
+| 3     | Norton-style dual-pane file commander (MVP) | shipped |
 
 See `IDEAS.md` for the full ledger with per-item scoping notes and
 `docs/GUIDE.md` for the user guide. `CLAUDE.md` holds the session

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LanguageIcon } from "@/components/LanguageIcon";
 import { GitBadge } from "@/components/GitBadge";
+import { ipc } from "@/lib/ipc";
 import { splitWindowsPath } from "@/lib/path";
 import { prefs, type SortMode } from "@/lib/prefs";
 import { cn, formatRelative } from "@/lib/utils";
@@ -14,9 +15,12 @@ interface Props {
   projects: Project[];
   selectedId: number | null;
   onSelect: (p: Project) => void;
+  /** Trigger a project list refresh after sort_order changes from
+   *  drag-reorder. App.tsx provides refreshProjects(). */
+  onReorder?: () => Promise<void> | void;
 }
 
-export function ProjectList({ roots, projects, selectedId, onSelect }: Props) {
+export function ProjectList({ roots, projects, selectedId, onSelect, onReorder }: Props) {
   const [query, setQuery] = useState("");
   const [manualCollapsed, setManualCollapsed] = useState<Record<number, boolean>>({});
   const [sortMode, setSortMode] = useState<SortMode>(prefs.sortMode());
@@ -145,7 +149,40 @@ export function ProjectList({ roots, projects, selectedId, onSelect }: Props) {
                       </li>
                     ) : items.length === 0 ? null : (
                       items.map((p) => (
-                        <li key={p.id}>
+                        <li
+                          key={p.id}
+                          draggable={p.pinned && !isQueryActive && sortMode === "default"}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/plain", String(p.id));
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onDragOver={(e) => {
+                            if (!p.pinned) return;
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                          }}
+                          onDrop={async (e) => {
+                            if (!p.pinned) return;
+                            e.preventDefault();
+                            const draggedId = Number(e.dataTransfer.getData("text/plain"));
+                            if (!draggedId || draggedId === p.id) return;
+                            // Swap sort_orders by re-numbering pinned-only.
+                            const pinned = projects.filter((x) => x.pinned);
+                            const fromIdx = pinned.findIndex((x) => x.id === draggedId);
+                            const toIdx = pinned.findIndex((x) => x.id === p.id);
+                            if (fromIdx < 0 || toIdx < 0) return;
+                            const reordered = pinned.slice();
+                            const [moved] = reordered.splice(fromIdx, 1);
+                            reordered.splice(toIdx, 0, moved);
+                            // Write back monotonic sort orders 10, 20, 30…
+                            await Promise.all(
+                              reordered.map((pr, i) =>
+                                ipc.setProjectSortOrder(pr.id, (i + 1) * 10),
+                              ),
+                            );
+                            await onReorder?.();
+                          }}
+                        >
                           <ProjectRow
                             project={p}
                             selected={selectedId === p.id}
@@ -256,9 +293,15 @@ function sortProjects(projects: Project[], mode: SortMode): Project[] {
       break;
     case "default":
     default:
-      // Pinned first, then last-opened DESC, then name ASC.
+      // Pinned first (ordered by sort_order so drag-reorder sticks),
+      // then last-opened DESC, then name ASC for the rest.
       arr.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        if (a.pinned && b.pinned) {
+          const ao = a.sort_order ?? 0;
+          const bo = b.sort_order ?? 0;
+          if (ao !== bo) return ao - bo;
+        }
         const ao = a.last_opened_at ?? "";
         const bo = b.last_opened_at ?? "";
         if (ao !== bo) return bo.localeCompare(ao);

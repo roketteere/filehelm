@@ -280,6 +280,7 @@ export default function App() {
               projects={projects}
               selectedId={selectedId}
               onSelect={(p) => setSelectedId(p.id)}
+              onReorder={refreshProjects}
             />
           </aside>
           <main className="min-w-0 flex-1 overflow-hidden bg-background">

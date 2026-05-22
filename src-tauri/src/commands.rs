@@ -132,7 +132,7 @@ pub async fn list_projects() -> AppResult<Vec<ProjectRow>> {
     let rows = sqlx::query_as::<_, ProjectBase>(
         "SELECT id, root_id, abs_path, name, primary_language, pinned, last_opened_at, last_scanned_at, custom_icon_slug, sort_order \
          FROM projects \
-         ORDER BY pinned DESC, last_opened_at DESC NULLS LAST, name ASC",
+         ORDER BY pinned DESC, sort_order ASC, last_opened_at DESC NULLS LAST, name ASC",
     )
     .fetch_all(&state().db)
     .await?;

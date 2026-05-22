@@ -377,23 +377,11 @@ sort on next refresh.
 
 ## What's next (backlog)
 
-`IDEAS.md` tracks every parked item with a per-item scoping note.
-The biggest scoped-to-future items each deserve their own focused
-session:
-
-- **Embedded PTY runner** (xterm.js + portable-pty + ConPTY)
-- **Norton-style dual-pane file commander** (Phase 3 — multi-week)
-- **OS-global hotkey** (`tauri-plugin-global-shortcut`)
-- **Diff viewer** for uncommitted changes
-- **Cross-project search** (ripgrep)
-- **Branch switcher** per project
-- **Action editor** (edit/reorder detected actions)
-- **Tags/labels** + **workspace presets**
-
-Smaller scoped items: CHANGELOG.md viewer tab, "open in browser",
-per-project custom icon, quick stats, backup/restore, splash screen,
-live clone progress streaming, drag-to-reorder pinned projects,
-Tauri auto-updater.
+The original 25-item backlog is fully shipped. Future requests live
+in `IDEAS.md`; current open items are usability polish on shipped
+surfaces (e.g. proper auto-updater endpoint once there's a release
+source, drag-to-reorder polish, tags/labels with colors,
+workspace presets, larger code-split for the JS bundle).
 
 Edit `IDEAS.md` to suggest more, or just say so directly.
 
