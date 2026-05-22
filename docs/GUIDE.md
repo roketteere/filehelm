@@ -345,21 +345,57 @@ flip the toggle in **Settings → General**.
 
 ---
 
+## CLI companion (`helm`)
+
+FileHelm ships with a standalone `helm` CLI under `cli/` that reads
+`~/.filehelm/db.sqlite` directly. The desktop app does **not** need
+to be running for `helm` to work.
+
+Install (one-time):
+
+```pwsh
+cd <filehelm-repo>/cli
+pnpm install
+pnpm link --global
+```
+
+Use from any terminal:
+
+```pwsh
+helm list                  # every project (id, name, language, path)
+helm list -v               # also show every detected action
+helm dev <name>            # fuzzy-match project, run its primary
+                           # dev action in a new Windows Terminal
+helm run <name>            # list the project's actions
+helm run <name> <label>    # run the action whose label includes <label>
+helm roots                 # registered roots
+```
+
+Launches via `helm` bump `last_opened_at` + log to `run_history`,
+so they appear in the desktop app's History tab and pinned-or-recent
+sort on next refresh.
+
 ## What's next (backlog)
 
-The 25-item idea backlog lives in `IDEAS.md` and tracks features like:
+`IDEAS.md` tracks every parked item with a per-item scoping note.
+The biggest scoped-to-future items each deserve their own focused
+session:
 
-- Live `git clone` progress streaming
-- Pinned / favorite projects with drag-to-reorder
-- Custom command chains (`pnpm install && pnpm dev` as one action)
-- Branch switcher per project
-- Diff viewer for uncommitted changes
-- Ripgrep-backed cross-project search
-- `helm dev <project>` CLI companion that runs from any terminal
-- Workspace presets (named groups of projects)
-- Tauri auto-updater
+- **Embedded PTY runner** (xterm.js + portable-pty + ConPTY)
+- **Norton-style dual-pane file commander** (Phase 3 — multi-week)
+- **OS-global hotkey** (`tauri-plugin-global-shortcut`)
+- **Diff viewer** for uncommitted changes
+- **Cross-project search** (ripgrep)
+- **Branch switcher** per project
+- **Action editor** (edit/reorder detected actions)
+- **Tags/labels** + **workspace presets**
 
-Suggest more by editing `IDEAS.md` or telling me directly.
+Smaller scoped items: CHANGELOG.md viewer tab, "open in browser",
+per-project custom icon, quick stats, backup/restore, splash screen,
+live clone progress streaming, drag-to-reorder pinned projects,
+Tauri auto-updater.
+
+Edit `IDEAS.md` to suggest more, or just say so directly.
 
 ---
 

@@ -159,19 +159,47 @@ SQLite file to also forget your roots and run history.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1   | MVP launcher: scan, classify, run-in-external-terminal | shipped |
-| 1.5 | Hierarchy + breadcrumbs UX | shipped |
-| 1.6 | 8 themes + texture/pattern overlays | shipped |
+| 1     | MVP launcher: scan, classify, run-in-external-terminal | shipped |
+| 1.5   | Hierarchy + breadcrumbs UX | shipped |
+| 1.6   | 8 themes + texture/pattern overlays | shipped |
 | 1.6.5 | Markdown raw-HTML rendering | shipped |
-| 1.7 | GitHub explorer + clone-and-import | shipped |
-| 1.8 | Frameless chrome + pink brand + system tray | shipped |
-| 1.9 | Custom keybinds + tree navigation + Settings + in-app Guide | shipped |
-| 2   | Git status badges, embedded PTY runner (xterm.js), global hotkey | backlog |
-| 3   | Norton-style dual-pane file commander | backlog |
+| 1.7   | GitHub explorer + clone-and-import | shipped |
+| 1.8   | Frameless chrome + pink brand + system tray | shipped |
+| 1.9   | Custom keybinds + tree navigation + Settings + in-app Guide | shipped |
+| 2.0   | Git surface: status badges + commits + pull/fetch | shipped |
+| 2.1   | QoL: sort modes + pin + drag-drop + close-to-tray toggle + run history | shipped |
+| 2.2   | `helm` CLI companion (`cli/`) | shipped |
+| 2.x+  | Embedded PTY runner, OS-global hotkey, diff viewer, tags, workspaces, … | scoped-to-future |
+| 3     | Norton-style dual-pane file commander | scoped-to-future |
 
-See `IDEAS.md` for the 25-item backlog and `docs/GUIDE.md` for the
-full user guide. `CLAUDE.md` holds the session brief for future
-Claude sessions in this repo.
+See `IDEAS.md` for the full ledger with per-item scoping notes and
+`docs/GUIDE.md` for the user guide. `CLAUDE.md` holds the session
+brief for future Claude sessions in this repo.
+
+## CLI
+
+A standalone `helm` CLI ships under `cli/`. Install once:
+
+```pwsh
+cd cli
+pnpm install
+pnpm link --global
+```
+
+Then from any terminal:
+
+```pwsh
+helm list                  # all projects + languages
+helm list -v               # plus every detected action
+helm dev filehelm          # fuzzy project lookup → run primary dev action
+helm run scumdump build    # run a specific action by label fragment
+helm roots                 # registered roots
+```
+
+The CLI reads `~/.filehelm/db.sqlite` directly via better-sqlite3 —
+the desktop app does NOT need to be running. Launches bump
+`last_opened_at` + log to `run_history` so they show up in the
+desktop app's History tab on next refresh.
 
 ---
 
