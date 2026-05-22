@@ -41,20 +41,36 @@ pub fn run() {
         )
         .init();
 
-    tauri::Builder::default()
-        // Single-instance MUST register before any other plugin so the
-        // second-invocation early-exit fires before we touch the db,
-        // tray icon, or global shortcut. When triggered, the existing
-        // instance's handler un-hides + focuses its main window.
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            use tauri::Manager;
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.unminimize();
-                let _ = win.show();
-                let _ = win.set_focus();
-            }
-        }))
-        .plugin(tauri_plugin_opener::init())
+    let mut builder = tauri::Builder::default();
+
+    // Single-instance MUST register before any other plugin so the
+    // second-invocation early-exit fires before we touch the db,
+    // tray icon, or global shortcut. When triggered, the existing
+    // instance's handler un-hides + focuses its main window.
+    //
+    // RELEASE BUILDS ONLY. In debug / `pnpm tauri dev`, the single-
+    // instance lock survives across cargo rebuilds — the freshly
+    // compiled binary surrenders to the stale one and the developer
+    // is permanently stuck on old code. Skipping it for debug builds
+    // keeps the dev hot-reload loop working; production users still
+    // get the focus-existing-instead-of-launching-duplicate behavior.
+    #[cfg(not(debug_assertions))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app, _argv, _cwd| {
+                use tauri::Manager;
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.unminimize();
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
+            },
+        ));
+    }
+
+    builder = builder.plugin(tauri_plugin_opener::init());
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())

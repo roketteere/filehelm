@@ -29,7 +29,9 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
   re-launching FileHelm while one is already running now focuses
   the existing window instead of spawning a duplicate. Kills the
   "HotKey already registered" warning that surfaced when two dev
-  instances raced for `Ctrl+Alt+Space`.
+  instances raced for `Ctrl+Alt+Space`. Release builds only — the
+  plugin's lock survives cargo rebuilds, which would otherwise
+  trap dev sessions on stale binaries.
 
 ### Fixed
 
