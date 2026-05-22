@@ -26,13 +26,17 @@ use crate::error::AppResult;
 
 pub async fn init(data_dir: &Path) -> AppResult<SqlitePool> {
     let db_path = data_dir.join("db.sqlite");
-    tracing::debug!(?db_path, "opening sqlite db");
+    tracing::info!(?db_path, "db::init step 1: pre-connect");
 
-    let pool = connect(&db_path).await?;
+    let pool = connect(&db_path).await.map_err(|e| {
+        tracing::error!(?e, "db::init step 2 FAILED: connect");
+        e
+    })?;
+    tracing::info!("db::init step 2: pool connected");
 
     match sqlx::migrate!("./migrations").run(&pool).await {
         Ok(()) => {
-            tracing::info!("migrations applied");
+            tracing::info!("db::init step 3: migrations applied");
             Ok(pool)
         }
         Err(e) if is_migration_drift(&e) => {
@@ -45,7 +49,12 @@ pub async fn init(data_dir: &Path) -> AppResult<SqlitePool> {
                 error = ?e,
                 "migration checksum mismatch — archiving DB and rebuilding from scratch"
             );
-            drop(pool); // release SQLite file handle before renaming
+            // pool.close().await drives the close future to completion
+            // for every connection; bare `drop(pool)` only decrements
+            // the Arc, leaving the SQLite file handles open async. On
+            // Windows that meant the subsequent std::fs::rename hit a
+            // sharing violation (the v0.2.3 release crash Joel hit).
+            pool.close().await;
             let archived = archive_db(&db_path)?;
             tracing::warn!(?archived, "archived old DB; recreating");
             let pool = connect(&db_path).await?;

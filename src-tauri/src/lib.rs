@@ -34,41 +34,49 @@ static STATE: OnceLock<AppState> = OnceLock::new();
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Tracing destination: a file in the user data dir so release
+    // builds (which detach stdout from the parent console on Windows)
+    // still produce diagnosable logs. Falls back to stdout if file
+    // open fails. The file is opened in truncate mode so each launch
+    // starts with a clean log — for forensics we always have
+    // last-panic.log anyway.
+    let log_writer: Box<dyn std::io::Write + Send + Sync> = (|| {
+        let dir = dirs::home_dir()?.join(".filehelm");
+        std::fs::create_dir_all(&dir).ok()?;
+        let f = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(dir.join("app.log"))
+            .ok()?;
+        Some(Box::new(f) as Box<dyn std::io::Write + Send + Sync>)
+    })()
+    .unwrap_or_else(|| Box::new(std::io::stdout()));
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info,filehelm=debug")),
+                .unwrap_or_else(|_| EnvFilter::new("info,filehelm=trace,sqlx=info")),
         )
+        .with_writer(std::sync::Mutex::new(log_writer))
+        .with_ansi(false)
         .init();
 
     install_panic_logger();
+    tracing::info!("filehelm::run entered");
 
     let mut builder = tauri::Builder::default();
 
-    // Single-instance MUST register before any other plugin so the
-    // second-invocation early-exit fires before we touch the db,
-    // tray icon, or global shortcut. When triggered, the existing
-    // instance's handler un-hides + focuses its main window.
+    // Single-instance plugin DISABLED while we diagnose the v0.2.3
+    // setup-hook panic ("io: The process cannot access the file
+    // because it is being used by another process. os error 32"). It
+    // was the newest thing in the release-only code path, so first
+    // suspect. If launching cleanly without it confirms the
+    // hypothesis, we re-enable with a fix; if not, look elsewhere.
     //
-    // RELEASE BUILDS ONLY. In debug / `pnpm tauri dev`, the single-
-    // instance lock survives across cargo rebuilds — the freshly
-    // compiled binary surrenders to the stale one and the developer
-    // is permanently stuck on old code. Skipping it for debug builds
-    // keeps the dev hot-reload loop working; production users still
-    // get the focus-existing-instead-of-launching-duplicate behavior.
-    #[cfg(not(debug_assertions))]
-    {
-        builder = builder.plugin(tauri_plugin_single_instance::init(
-            |app, _argv, _cwd| {
-                use tauri::Manager;
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.unminimize();
-                    let _ = win.show();
-                    let _ = win.set_focus();
-                }
-            },
-        ));
-    }
+    // Original gate (re-enable later):
+    //   #[cfg(not(debug_assertions))]
+    //   { builder = builder.plugin(tauri_plugin_single_instance::init(...)); }
 
     builder = builder.plugin(tauri_plugin_opener::init());
 
@@ -104,11 +112,16 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            tracing::info!("setup: entered");
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
+                tracing::info!("setup: inside async block_on");
                 let data_dir = filehelm_data_dir()?;
+                tracing::info!(?data_dir, "setup: resolved data dir");
                 std::fs::create_dir_all(&data_dir)?;
+                tracing::info!("setup: create_dir_all ok");
                 let db = db::init(&data_dir).await?;
+                tracing::info!("setup: db::init ok");
                 STATE
                     .set(AppState {
                         db,
