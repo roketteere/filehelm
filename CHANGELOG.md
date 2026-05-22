@@ -32,6 +32,39 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
   instances raced for `Ctrl+Alt+Space`. Release builds only — the
   plugin's lock survives cargo rebuilds, which would otherwise
   trap dev sessions on stale binaries.
+- **Scan-all resiliency** — per-root 90-second timeout so a hung /
+  missing-network-share root can't lock the spinner forever, and
+  inline progress text on the button (`Scanning 2/5…`) plus a
+  tooltip naming the current root. Single-root failures no longer
+  abort the whole batch; collected errors surface in the existing
+  banner.
+
+### Changed
+
+- **Title bar carries the brand + global stats** —
+  `⚓ FileHelm — Project Manager — 📁 N projects · 🌳 M roots`.
+  Removed the duplicate anchor logo + "FileHelm" + "project
+  launcher" tagline + plain-text count line that previously sat in
+  the inline header above the search bar. The action buttons
+  (Commander, Clone, Scan all, Roots, Settings) stay; everything
+  else collapses to a single canonical brand display in the title
+  bar. Same colored-icon treatment (sky-blue project count, rose
+  root count) we use elsewhere.
+- **Project row layout** — name + meta on the left, language icons
+  on the right (was reversed). Pin marker stays adjacent to the
+  name.
+- **Project rail row alignment** — rows now use a CSS grid with a
+  fixed 4.5rem icon column, so the language-icon stack always sits
+  in the same vertical slot regardless of badge count (1, 2, or 3
+  icons all end at the same right edge).
+- **Reserved scrollbar gutter** in the project rail — the
+  ScrollArea is now `type="always"` with `pr-4` reserved on the
+  content. The custom scrollbar lives in its own 10px column with
+  a 6px breathing gap; row hover backgrounds no longer touch the
+  scrollbar track.
+- **Aggregate stats row removed from the project rail.** The same
+  `N projects · M roots` info now lives in the title bar (one
+  canonical source).
 
 ### Fixed
 
