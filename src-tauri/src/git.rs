@@ -5,11 +5,11 @@
 //! respond in tens of ms; if it ever feels slow we'll add a TTL cache.
 
 use std::path::Path;
-use std::process::Command;
 
 use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
+use crate::proc::silent_command;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct GitInfo {
@@ -172,7 +172,7 @@ pub fn diff(repo: &Path, staged: bool) -> AppResult<String> {
 // ---- internals ----
 
 fn run_str(repo: &Path, args: &[&str]) -> AppResult<String> {
-    let out = Command::new("git")
+    let out = silent_command("git")
         .args(args)
         .current_dir(repo)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -197,7 +197,7 @@ fn run_str(repo: &Path, args: &[&str]) -> AppResult<String> {
 }
 
 fn run_with_log(repo: &Path, args: &[&str]) -> AppResult<GitOutcome> {
-    let out = Command::new("git")
+    let out = silent_command("git")
         .args(args)
         .current_dir(repo)
         .env("GIT_TERMINAL_PROMPT", "0")

@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Emitter, Runtime};
 use tokio::io::AsyncBufReadExt;
-use tokio::process::Command;
 
 use crate::error::{AppError, AppResult};
+use crate::proc::silent_tokio_command;
 
 pub struct CloneOutcome {
     pub dest: PathBuf,
@@ -48,7 +48,7 @@ pub async fn clone_to_with_progress<R: Runtime>(
         )));
     }
 
-    let mut cmd = Command::new("git");
+    let mut cmd = silent_tokio_command("git");
     cmd.arg("clone")
         .arg("--progress")
         .arg(url)

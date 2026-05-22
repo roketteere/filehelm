@@ -540,13 +540,15 @@ pub fn fs_write_text(path: String, content: String) -> AppResult<()> {
 /// file type (browser for .html, image viewer for .png, etc.).
 #[tauri::command]
 pub fn open_path_external(path: String) -> AppResult<()> {
-    use std::process::Command;
     #[cfg(target_os = "windows")]
     {
         // `cmd /C start "" <path>` is the canonical Windows way to
         // hand off to shell association. Empty quoted title prevents
-        // `start` from treating the path as a window title.
-        Command::new("cmd")
+        // `start` from treating the path as a window title. We
+        // wrap in CREATE_NO_WINDOW so the cmd doesn't flash a
+        // console (the file's associated app comes up with its own
+        // window).
+        crate::proc::silent_command("cmd")
             .args(["/C", "start", "", &path])
             .spawn()
             .map_err(crate::error::AppError::Io)?;
@@ -554,7 +556,7 @@ pub fn open_path_external(path: String) -> AppResult<()> {
     }
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
+        std::process::Command::new("open")
             .arg(&path)
             .spawn()
             .map_err(crate::error::AppError::Io)?;
@@ -562,7 +564,7 @@ pub fn open_path_external(path: String) -> AppResult<()> {
     }
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
+        std::process::Command::new("xdg-open")
             .arg(&path)
             .spawn()
             .map_err(crate::error::AppError::Io)?;

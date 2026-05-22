@@ -14,6 +14,15 @@ use once_cell::sync::Lazy;
 use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::error::{AppError, AppResult};
+use crate::proc::silent_command;
+
+// Convention used in this file:
+//   Command::new(...)       — VISIBLE child (deliberate terminal launch,
+//                             action-run, "Open terminal here").
+//   silent_command(...)     — INVISIBLE child (taskkill, VS-Code launcher,
+//                             explorer.exe reveal, etc.). On Windows the
+//                             helper sets CREATE_NO_WINDOW so the cmd
+//                             host doesn't flash a console window.
 
 /// Tracks external (wt.exe / cmd.exe) launches so the UI can kill them.
 /// The watcher thread per launch owns the `Child` and removes the entry
@@ -148,7 +157,7 @@ pub fn kill_external_launch(launch_id: i64) -> AppResult<()> {
 
     #[cfg(target_os = "windows")]
     {
-        let _ = Command::new("taskkill")
+        let _ = silent_command("taskkill")
             .args(["/T", "/F", "/PID", &t.pid.to_string()])
             .output();
     }
@@ -181,14 +190,16 @@ pub fn open_editor(project_path: &Path) -> AppResult<()> {
     // Install 'code' command in PATH" yet.
     #[cfg(target_os = "windows")]
     {
-        let res = Command::new("cmd.exe")
+        // cmd.exe wraps the .cmd shim that "code" actually is on
+        // Windows; silent_command keeps it from flashing a console.
+        let res = silent_command("cmd.exe")
             .args(["/C", "code"])
             .arg(project_path)
             .spawn();
         if res.is_ok() {
             return Ok(());
         }
-        Command::new("explorer.exe").arg(project_path).spawn()?;
+        silent_command("explorer.exe").arg(project_path).spawn()?;
         Ok(())
     }
     #[cfg(target_os = "macos")]
@@ -283,7 +294,7 @@ pub fn open_terminal_at(working_dir: &Path) -> AppResult<()> {
 pub fn reveal_in_explorer(target_path: &Path) -> AppResult<()> {
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer.exe")
+        silent_command("explorer.exe")
             .arg("/select,")
             .arg(target_path)
             .spawn()?;
@@ -316,7 +327,7 @@ pub fn reveal_in_explorer(target_path: &Path) -> AppResult<()> {
 pub fn open_in_explorer(target_path: &Path) -> AppResult<()> {
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer.exe").arg(target_path).spawn()?;
+        silent_command("explorer.exe").arg(target_path).spawn()?;
         Ok(())
     }
     #[cfg(target_os = "macos")]

@@ -2,11 +2,11 @@
 //! missing, returns a clear error.
 
 use std::path::Path;
-use std::process::Command;
 
 use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
+use crate::proc::silent_command;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct SearchHit {
@@ -48,7 +48,7 @@ pub fn search(
         if !path.exists() {
             continue;
         }
-        let mut cmd = Command::new("rg");
+        let mut cmd = silent_command("rg");
         cmd.arg("--vimgrep") // file:line:col:match
             .arg("--no-config")
             .arg("--no-heading")

@@ -6,6 +6,7 @@ mod db;
 mod error;
 mod fs_ops;
 mod git;
+mod proc;
 mod pty;
 mod runner;
 mod scanner;
