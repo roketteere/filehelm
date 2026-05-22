@@ -185,6 +185,8 @@ pub fn run() {
             commands::pty_kill,
             commands::run_action_embedded,
             commands::fs_read_dir,
+            commands::fs_read_text,
+            commands::fs_write_text,
             commands::fs_copy,
             commands::fs_move,
             commands::fs_mkdir,

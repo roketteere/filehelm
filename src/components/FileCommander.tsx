@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp,
   ArrowLeftRight,
@@ -52,6 +52,12 @@ import { cn, formatRelative } from "@/lib/utils";
 // a distinct VS-Code-only path for F4 / Edit.
 import type { DirEntry } from "@/types";
 
+// QuickView is lazy-loaded so CodeMirror's ~30-50 KB chunk only ships
+// on first F3/F4 — not on commander mount.
+const QuickView = lazy(() =>
+  import("@/components/QuickView").then((m) => ({ default: m.QuickView })),
+);
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -77,6 +83,13 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
   const [active, setActive] = useState<Side>("left");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // QuickView dialog state: when set, the QuickView modal pops on top
+  // of the commander. F3 (View), F4 (Edit), and double-click on a
+  // file all flow through here.
+  const [quickView, setQuickView] = useState<
+    { path: string; mode: "view" | "edit" } | null
+  >(null);
 
   // Prompt dialog (used for mkdir / rename / zip-name).
   const [prompt, setPrompt] = useState<{
@@ -182,11 +195,10 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
         await refreshPane(side, entry.path);
         return;
       }
-      try {
-        await ipc.openPathExternal(entry.path);
-      } catch (e) {
-        setError(`Failed to open "${entry.name}": ${e}`);
-      }
+      // Enter / double-click on a file pops QuickView in read-only
+      // mode. The user flips to edit from inside the dialog if they
+      // want — same affordance as F3.
+      setQuickView({ path: entry.path, mode: "view" });
     },
     [refreshPane],
   );
@@ -327,11 +339,7 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
       await refreshPane(active, entry.path);
       return;
     }
-    try {
-      await ipc.openPathExternal(entry.path);
-    } catch (e) {
-      setError(`Failed to open "${entry.name}": ${e}`);
-    }
+    setQuickView({ path: entry.path, mode: "view" });
   };
 
   const opEdit = async () => {
@@ -344,11 +352,18 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
       );
       return;
     }
-    try {
-      await ipc.openPathInEditor(items[0].path);
-    } catch (e) {
-      setError(`Failed to open "${items[0].name}" in editor: ${e}`);
+    const entry = items[0];
+    if (entry.is_dir) {
+      // Editing a folder still opens VS Code with it as the workspace;
+      // QuickView isn't for folders.
+      try {
+        await ipc.openPathInEditor(entry.path);
+      } catch (e) {
+        setError(`Failed to open "${entry.name}" in editor: ${e}`);
+      }
+      return;
     }
+    setQuickView({ path: entry.path, mode: "edit" });
   };
 
   const opMoveToOther = async () => {
@@ -692,6 +707,16 @@ export function FileCommander({ open, onOpenChange, initialPath }: Props) {
               </div>
             </DialogContent>
           </Dialog>
+        )}
+
+        {quickView && (
+          <Suspense fallback={null}>
+            <QuickView
+              path={quickView.path}
+              initialMode={quickView.mode}
+              onClose={() => setQuickView(null)}
+            />
+          </Suspense>
         )}
       </DialogContent>
     </Dialog>

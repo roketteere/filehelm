@@ -30,7 +30,7 @@ const SKIP_DIRS: &[&str] = &[
     "bin",
     "obj",
 ];
-const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
+pub const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 pub struct ProjectStats {

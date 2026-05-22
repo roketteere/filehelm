@@ -155,6 +155,18 @@ export interface DirEntry {
   modified_iso: string | null;
 }
 
+/** Result from fs_read_text — for the QuickView dialog. */
+export interface FileReadResult {
+  /** Empty when binary === true. UTF-8 text otherwise (possibly truncated). */
+  content: string;
+  /** True when total_bytes exceeded the read cap. */
+  truncated: boolean;
+  total_bytes: number;
+  /** True when the file looked binary (null byte in first 8 KiB OR
+   * UTF-8 decode failure). */
+  binary: boolean;
+}
+
 export interface RunOutcome {
   /** External-launch id for the spawned terminal — pass to
    * killExternalLaunch to kill the process tree. */

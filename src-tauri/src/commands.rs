@@ -402,6 +402,118 @@ pub fn open_path_in_editor(path: String) -> AppResult<()> {
     runner::open_editor(Path::new(&path))
 }
 
+/// Read a file's content for the in-app QuickView viewer/editor.
+///
+/// Caps at `max_bytes` (frontend default 2 MiB) and also at the global
+/// `stats::MAX_FILE_BYTES` hard ceiling (4 MiB). Sniffs the first 8 KiB
+/// for null bytes — if found we mark the file as binary and skip
+/// content read so the frontend can render a "binary" placeholder
+/// instead of dumping garbage into CodeMirror. UTF-8 decode failures
+/// likewise mark binary.
+#[derive(Debug, Serialize)]
+pub struct FileReadResult {
+    pub content: String,
+    pub truncated: bool,
+    pub total_bytes: u64,
+    pub binary: bool,
+}
+
+#[tauri::command]
+pub fn fs_read_text(path: String, max_bytes: u64) -> AppResult<FileReadResult> {
+    use std::fs::File;
+    use std::io::Read;
+
+    let p = Path::new(&path);
+    let meta = std::fs::metadata(p).map_err(AppError::Io)?;
+    if !meta.is_file() {
+        return Err(AppError::Invalid(format!(
+            "not a regular file: {}",
+            p.display()
+        )));
+    }
+    let total_bytes = meta.len();
+
+    // Effective cap = min(frontend ask, hard ceiling). Both are u64.
+    let cap = max_bytes.min(stats::MAX_FILE_BYTES);
+    let read_len = total_bytes.min(cap) as usize;
+    let truncated = total_bytes > cap;
+
+    let mut f = File::open(p).map_err(AppError::Io)?;
+    let mut buf = vec![0u8; read_len];
+    f.read_exact(&mut buf).map_err(AppError::Io)?;
+
+    // Binary sniff: any null in the first 8 KiB → binary.
+    let sniff_len = buf.len().min(8 * 1024);
+    let is_binary_null = buf[..sniff_len].contains(&0u8);
+
+    if is_binary_null {
+        return Ok(FileReadResult {
+            content: String::new(),
+            truncated,
+            total_bytes,
+            binary: true,
+        });
+    }
+
+    match String::from_utf8(buf) {
+        Ok(content) => Ok(FileReadResult {
+            content,
+            truncated,
+            total_bytes,
+            binary: false,
+        }),
+        Err(_) => Ok(FileReadResult {
+            content: String::new(),
+            truncated,
+            total_bytes,
+            binary: true,
+        }),
+    }
+}
+
+/// Write text content to disk via a `<path>.tmp → rename` shuffle so a
+/// crash mid-write can't leave the user's file half-written. Used by
+/// the QuickView editor's Save / Ctrl+S.
+#[tauri::command]
+pub fn fs_write_text(path: String, content: String) -> AppResult<()> {
+    let target = Path::new(&path);
+    let parent = target.parent().ok_or_else(|| {
+        AppError::Invalid(format!("path has no parent: {}", target.display()))
+    })?;
+    if !parent.exists() {
+        return Err(AppError::Invalid(format!(
+            "parent directory does not exist: {}",
+            parent.display()
+        )));
+    }
+
+    // Build a unique-enough tmp path next to the target so the rename
+    // stays on the same filesystem (cross-volume rename would fall
+    // back to copy-then-delete and break atomicity).
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    let tmp_name = format!(
+        ".{}.{pid}.{nanos}.filehelm-tmp",
+        target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("save")
+    );
+    let tmp_path = parent.join(tmp_name);
+
+    std::fs::write(&tmp_path, content.as_bytes()).map_err(AppError::Io)?;
+    if let Err(e) = std::fs::rename(&tmp_path, target) {
+        // Best-effort cleanup; leaving a .filehelm-tmp file behind is
+        // worse than swallowing the unlink error.
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(AppError::Io(e));
+    }
+    Ok(())
+}
+
 /// Open an arbitrary file with the OS's default application — Windows
 /// shell-association, `open` on macOS, `xdg-open` on Linux. Used by
 /// the file commander's F3 / View affordance and the

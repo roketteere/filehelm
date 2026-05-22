@@ -7,6 +7,7 @@ import type {
   DetectedUrl,
   DirEntry,
   ExternalLaunchInfo,
+  FileReadResult,
   GitCommit,
   GitInfo,
   GitOutcome,
@@ -58,6 +59,12 @@ export const ipc = {
     invoke<void>("open_path_in_editor", { path }),
   openPathExternal: (path: string) =>
     invoke<void>("open_path_external", { path }),
+
+  // Quick view / edit (CodeMirror-backed in-app dialog).
+  readText: (path: string, maxBytes: number = 2 * 1024 * 1024) =>
+    invoke<FileReadResult>("fs_read_text", { path, maxBytes }),
+  writeText: (path: string, content: string) =>
+    invoke<void>("fs_write_text", { path, content }),
 
   // GitHub clone & import
   cloneRepo: (url: string, dest: string) =>

@@ -11,11 +11,36 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 
 ### Added
 
+- **Quick View + Quick Edit in the file commander** — F3 / F4 now
+  open a built-in CodeMirror 6 dialog instead of shelling out to
+  the OS default app / VS Code. Inline syntax highlighting for 15+
+  languages (JS / TS / Rust / Python / Go / Java / Markdown / JSON /
+  YAML / HTML / CSS / XML / SQL / C / C++), markdown gets a
+  Rendered ↔ Raw tab, images render inline via the Tauri asset
+  protocol, binary files show a placeholder with "Open externally".
+  View mode is read-only with an Edit button; Edit mode supports
+  Ctrl+S save (atomic `.tmp + rename` write on the backend), dirty-
+  state guard on close, and Discard. "Open in VS Code" stays as the
+  IDE-grade escape hatch.
+- Two backend Tauri commands: `fs_read_text(path, max_bytes)` with
+  binary-sniff + UTF-8 decode fallback + 4 MiB hard ceiling, and
+  `fs_write_text(path, content)` with atomic temp-file write.
 - **Single-instance enforcement** (`tauri-plugin-single-instance@2`) —
   re-launching FileHelm while one is already running now focuses
   the existing window instead of spawning a duplicate. Kills the
   "HotKey already registered" warning that surfaced when two dev
   instances raced for `Ctrl+Alt+Space`.
+
+### Fixed
+
+- File commander **View (F3) / Edit (F4) / Enter / double-click**
+  used to fail silently with `opener.open_path not allowed.
+  Permissions associated with this command: opener:allow-open-path`
+  because both handlers called the opener plugin's `openPath()`
+  outside its capability scope, AND View/Edit were the same call
+  (both indistinguishable). Now both flow through the new
+  in-app QuickView dialog; "Open in VS Code" stays as the heavy
+  fallback.
 
 ## [0.2.0] — 2026-05-22
 
