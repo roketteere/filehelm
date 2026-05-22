@@ -10,6 +10,28 @@ import { TitleBar } from "@/components/TitleBar";
 import { SortPicker } from "@/components/SortPicker";
 import { applyStoredTheme } from "@/lib/theme";
 import { combosFor, format as fmtCombo, onAction, useKeybinds } from "@/lib/keybinds";
+
+/**
+ * Race a promise against a timeout. If the timeout wins, throw a
+ * descriptive error so the caller can log + continue. The original
+ * promise is left dangling — for IPC calls that means the backend
+ * still completes its work, the result is just ignored on this side.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(msg)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
 import { ipc } from "@/lib/ipc";
 import { prefs } from "@/lib/prefs";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -72,6 +94,11 @@ export default function App() {
   const setFilesOpenRef = useRef(setFilesOpen);
   setFilesOpenRef.current = setFilesOpen;
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{
+    current: string;
+    index: number;
+    total: number;
+  } | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
 
   // Keybind dispatcher — emits `filehelm:action:<id>` events for the
@@ -183,15 +210,45 @@ export default function App() {
 
   const scanAll = useCallback(async () => {
     setScanning(true);
+    setBootError(null);
+    const errors: string[] = [];
+    // Hard cap per root so a single hung / missing-network-share root
+    // can't lock the spinner forever. 90 s is generous for a normal
+    // scan; anything past it almost certainly means something is
+    // wrong (permission, dead drive letter, etc).
+    const PER_ROOT_TIMEOUT_MS = 90_000;
     try {
-      for (const r of roots) {
-        await ipc.scanRoot(r.id);
+      for (let i = 0; i < roots.length; i++) {
+        const r = roots[i];
+        const name = r.label ?? r.abs_path;
+        setScanProgress({ current: name, index: i + 1, total: roots.length });
+        try {
+          await withTimeout(
+            ipc.scanRoot(r.id),
+            PER_ROOT_TIMEOUT_MS,
+            `Scan timed out after ${PER_ROOT_TIMEOUT_MS / 1000}s`,
+          );
+        } catch (e) {
+          // One root failing shouldn't kill the whole batch — record
+          // it, surface in the banner, and keep going.
+          const msg = `${name}: ${e}`;
+          console.warn("[filehelm] scan_root failed", r, e);
+          errors.push(msg);
+        }
       }
       await refreshProjects();
     } catch (e) {
-      setBootError(String(e));
+      errors.push(String(e));
     } finally {
       setScanning(false);
+      setScanProgress(null);
+      if (errors.length > 0) {
+        setBootError(
+          errors.length === 1
+            ? `Scan failed — ${errors[0]}`
+            : `Scan finished with ${errors.length} errors:\n${errors.join("\n")}`,
+        );
+      }
     }
   }, [roots, refreshProjects]);
 
@@ -280,6 +337,7 @@ export default function App() {
           rootsCount={roots.length}
           projectCount={projects.length}
           scanning={scanning}
+          scanProgress={scanProgress}
           onScanAll={scanAll}
           onOpenRoots={() => setRootsOpen(true)}
           onOpenGithub={() => setGithubOpen(true)}
@@ -400,6 +458,7 @@ function Header({
   rootsCount,
   projectCount,
   scanning,
+  scanProgress,
   onScanAll,
   onOpenRoots,
   onOpenGithub,
@@ -411,6 +470,7 @@ function Header({
   rootsCount: number;
   projectCount: number;
   scanning: boolean;
+  scanProgress: { current: string; index: number; total: number } | null;
   onScanAll: () => void;
   onOpenRoots: () => void;
   onOpenGithub: () => void;
@@ -453,9 +513,21 @@ function Header({
           <Github />
           <span className="hidden lg:inline">Clone from GitHub</span>
         </Button>
-        <Button variant="outline" size="sm" onClick={onScanAll} disabled={scanning || rootsCount === 0}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onScanAll}
+          disabled={scanning || rootsCount === 0}
+          title={
+            scanProgress
+              ? `Scanning ${scanProgress.index}/${scanProgress.total}: ${scanProgress.current}`
+              : undefined
+          }
+        >
           {scanning ? <Loader2 className="animate-spin" /> : <RefreshCcw />}
-          Scan all
+          {scanProgress
+            ? `Scanning ${scanProgress.index}/${scanProgress.total}…`
+            : "Scan all"}
         </Button>
         <Button variant="default" size="sm" onClick={onOpenRoots}>
           <FolderCog />
