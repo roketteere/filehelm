@@ -178,12 +178,14 @@ export function FileTree({ entries, className, defaultExpandTop = true }: Props)
       tabIndex={0}
       onKeyDown={onKeyDown}
       className={cn(
-        "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "h-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
       aria-label="File tree"
     >
-      <ul className="text-sm">
+      {/* pr-3 reserves room for the vertical scrollbar so file names
+          and sizes never sit flush against the bar. */}
+      <ul className="space-y-px pr-3 text-sm">
         {visible.map((node) => (
           <FlatRow
             key={node.path}
@@ -224,7 +226,7 @@ function FlatRow({
   onMouseEnter: () => void;
   registerRef: (el: HTMLLIElement | null) => void;
 }) {
-  const indent = { paddingLeft: `${depth * 14 + 6}px` };
+  const indent = { paddingLeft: `${depth * 14 + 8}px` };
   const slug = node.type === "blob" ? extensionToSlug(node.name) : null;
   return (
     <li ref={registerRef} onMouseEnter={onMouseEnter}>
@@ -232,7 +234,7 @@ function FlatRow({
         type="button"
         onClick={onActivate}
         className={cn(
-          "flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-accent/60",
+          "flex w-full items-center gap-2 rounded py-1 pl-1 pr-2 text-left transition-colors hover:bg-accent/60",
           focused && "bg-primary/15 ring-1 ring-primary/40",
           node.type === "blob" && "cursor-default",
         )}
@@ -255,9 +257,10 @@ function FlatRow({
         ) : (
           <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
-        <span className="truncate text-[12px]">{node.name}</span>
+        {/* min-w-0 lets the name actually shrink so `truncate` works. */}
+        <span className="min-w-0 flex-1 truncate text-[12px]">{node.name}</span>
         {node.type === "blob" && typeof node.size === "number" && (
-          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+          <span className="shrink-0 pl-3 text-[10px] tabular-nums text-muted-foreground">
             {formatBytes(node.size)}
           </span>
         )}

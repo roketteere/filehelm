@@ -2,10 +2,17 @@ import * as React from "react";
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { cn } from "@/lib/utils";
 
+interface ScrollAreaProps
+  extends React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> {
+  /** Show a horizontal scrollbar when content overflows on the X axis.
+   * Default true so callers don't silently clip wide rows. */
+  horizontal?: boolean;
+}
+
 const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
->(({ className, children, ...props }, ref) => (
+  ScrollAreaProps
+>(({ className, children, horizontal = true, ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     ref={ref}
     className={cn("relative overflow-hidden", className)}
@@ -14,7 +21,8 @@ const ScrollArea = React.forwardRef<
     <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
       {children}
     </ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
+    <ScrollBar orientation="vertical" />
+    {horizontal && <ScrollBar orientation="horizontal" />}
     <ScrollAreaPrimitive.Corner />
   </ScrollAreaPrimitive.Root>
 ));
@@ -29,8 +37,8 @@ const ScrollBar = React.forwardRef<
     orientation={orientation}
     className={cn(
       "flex touch-none select-none transition-colors",
-      orientation === "vertical" && "h-full w-2 border-l border-l-transparent p-px",
-      orientation === "horizontal" && "h-2 flex-col border-t border-t-transparent p-px",
+      orientation === "vertical" && "h-full w-2.5 border-l border-l-transparent p-px",
+      orientation === "horizontal" && "h-2.5 flex-col border-t border-t-transparent p-px",
       className,
     )}
     {...props}

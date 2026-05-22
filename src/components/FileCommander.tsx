@@ -333,7 +333,7 @@ function Pane({
     <div
       onMouseDown={onActivate}
       className={cn(
-        "flex h-[60vh] flex-col overflow-hidden rounded-md border bg-card",
+        "flex h-[60vh] min-w-0 flex-col overflow-hidden rounded-md border bg-card",
         isActive ? "border-primary ring-2 ring-primary/30" : "border-border",
       )}
     >
@@ -348,12 +348,19 @@ function Pane({
         <Button
           variant="ghost"
           size="sm"
-          className="ml-2 h-7 px-1 text-[10px]"
+          className="ml-1.5 h-7 shrink-0 px-1 text-[10px]"
           onClick={() => onPathClick(home)}
+          title="Home directory"
         >
           ~
         </Button>
-        <div className="flex min-w-0 flex-1 items-center gap-0.5 truncate font-mono text-[10px]">
+        {/* Horizontally scrollable so deep paths stay reachable;
+            the latest segment naturally ends up scrolled into view
+            because the ml-auto + min-w-0 chain lets the row grow. */}
+        <div
+          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto whitespace-nowrap font-mono text-[10px] [scrollbar-width:thin]"
+          title={state.cwd}
+        >
           {segments.map((seg, i) => {
             const isLast = i === segments.length - 1;
             return (
@@ -391,20 +398,21 @@ function Pane({
               key={entry.path}
               onClick={() => onSelect(i)}
               onDoubleClick={() => onEnter(entry)}
+              title={entry.path}
               className={cn(
-                "flex cursor-default items-center gap-1.5 px-2 py-0.5 font-mono text-[11px]",
+                "flex cursor-default items-center gap-2 py-1 pl-2 pr-3 font-mono text-[11px]",
                 state.selectedIndex === i && isActive && "bg-primary/20 text-foreground",
                 state.selectedIndex === i && !isActive && "bg-accent",
               )}
             >
               {entry.is_dir ? (
-                <Folder className="h-3 w-3 shrink-0 text-primary/80" />
+                <Folder className="h-3.5 w-3.5 shrink-0 text-primary/80" />
               ) : (
-                <File className="h-3 w-3 shrink-0 text-muted-foreground" />
+                <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               )}
-              <span className="truncate">{entry.name}</span>
+              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
               {!entry.is_dir && (
-                <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                <span className="shrink-0 pl-3 text-[10px] tabular-nums text-muted-foreground">
                   {formatBytes(entry.size)}
                 </span>
               )}

@@ -338,14 +338,16 @@ export function GithubDialog({ open, onOpenChange, defaultParent, onCloned }: Pr
                 </div>
               </TabsContent>
               <TabsContent value="files">
-                <ScrollArea className="h-72 rounded-md border border-border bg-card p-2">
-                  {tree && tree.length > 0 ? (
-                    <FileTree entries={tree} />
-                  ) : (
-                    <div className="grid h-full place-items-center text-xs text-muted-foreground">
-                      No files (or tree fetch failed).
-                    </div>
-                  )}
+                <ScrollArea className="h-80 rounded-md border border-border bg-card">
+                  <div className="py-2">
+                    {tree && tree.length > 0 ? (
+                      <FileTree entries={tree} />
+                    ) : (
+                      <div className="grid h-72 place-items-center text-xs text-muted-foreground">
+                        No files (or tree fetch failed).
+                      </div>
+                    )}
+                  </div>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
