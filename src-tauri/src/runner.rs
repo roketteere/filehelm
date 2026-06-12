@@ -72,21 +72,37 @@ pub fn spawn_external<R: Runtime>(
     Ok(register_launch(app, action_id, child))
 }
 
+// @brk: do NOT launch tracked action-runs through wt.exe. Windows Terminal's
+// wt.exe is a thin launcher that hands the session to the WindowsTerminal
+// broker and EXITS IMMEDIATELY — so the Child we hold is dead within ms: the
+// watcher's wait() returns at once (card flips back to Play instantly), the
+// tracked PID is already gone, and taskkill hits a corpse while the real
+// terminal lives on. Spawning the shell DIRECTLY with CREATE_NEW_CONSOLE
+// gives a real, long-lived, killable PID that still has its own window.
+#[cfg(target_os = "windows")]
+const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
 #[cfg(target_os = "windows")]
 fn spawn_child(working_dir: &Path, command: &str, choice: TerminalChoice) -> AppResult<Child> {
-    match choice {
-        TerminalChoice::Auto | TerminalChoice::WindowsTerminal => Command::new("wt.exe")
-            .arg("-d")
-            .arg(working_dir)
-            .args(["pwsh", "-NoExit", "-Command"])
-            .arg(command)
-            .spawn()
-            .or_else(|_| spawn_cmd(working_dir, command))
-            .map_err(AppError::Io),
-        TerminalChoice::Powershell => Command::new("pwsh")
+    use std::os::windows::process::CommandExt;
+    // pwsh (PowerShell 7) is preferred when present, but stock Windows only
+    // ships powershell.exe (5.1) — hardcoding pwsh failed every launch on
+    // machines without PS7. Try pwsh → powershell → cmd; spawn() errors fast
+    // when a shell isn't on PATH, so .or_else falls through cleanly.
+    let shell = |bin: &str| {
+        Command::new(bin)
             .args(["-NoExit", "-Command", command])
             .current_dir(working_dir)
+            .creation_flags(CREATE_NEW_CONSOLE)
             .spawn()
+    };
+    match choice {
+        TerminalChoice::Auto | TerminalChoice::WindowsTerminal => shell("pwsh")
+            .or_else(|_| shell("powershell"))
+            .or_else(|_| spawn_cmd(working_dir, command))
+            .map_err(AppError::Io),
+        TerminalChoice::Powershell => shell("pwsh")
+            .or_else(|_| shell("powershell"))
             .map_err(AppError::Io),
         TerminalChoice::Cmd => spawn_cmd(working_dir, command).map_err(AppError::Io),
     }
@@ -94,9 +110,14 @@ fn spawn_child(working_dir: &Path, command: &str, choice: TerminalChoice) -> App
 
 #[cfg(target_os = "windows")]
 fn spawn_cmd(working_dir: &Path, command: &str) -> std::io::Result<Child> {
+    use std::os::windows::process::CommandExt;
+    // Direct cmd in a fresh console — NOT `start`, which detaches and hands
+    // back a Child that exits immediately (same untrackable/unkillable trap
+    // as wt.exe). /K keeps the window open after the command finishes.
     Command::new("cmd.exe")
-        .args(["/C", "start", "cmd.exe", "/K", command])
+        .args(["/K", command])
         .current_dir(working_dir)
+        .creation_flags(CREATE_NEW_CONSOLE)
         .spawn()
 }
 

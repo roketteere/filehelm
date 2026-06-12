@@ -9,7 +9,22 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 
 ## [Unreleased]
 
-(nothing yet)
+### Fixed
+
+- **Action launch buttons actually launch — and Stop actually stops.**
+  External action runs were routed through `wt.exe`, which is a thin
+  launcher that hands the session to the WindowsTerminal broker and
+  exits immediately. Consequences: the tracked child PID died within
+  milliseconds, the action card's running state reverted instantly
+  (looking like the button "did nothing"), and Stop's
+  `taskkill /T /F` hit an already-dead PID while the real terminal
+  lived on. On top of that the launch line hardcoded `pwsh`
+  (PowerShell 7), which stock Windows doesn't ship — so machines with
+  only `powershell.exe` 5.1 failed every external launch outright.
+  The runner now spawns the shell **directly** in a fresh console
+  (`CREATE_NEW_CONSOLE`) with a `pwsh → powershell → cmd /K` fallback
+  chain — a real, long-lived, killable PID, so the launch↔stop toggle
+  and force-kill work end-to-end. (`src-tauri/src/runner.rs`)
 
 ## [0.2.4] — 2026-05-22
 
