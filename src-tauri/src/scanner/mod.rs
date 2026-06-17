@@ -90,37 +90,72 @@ impl ActionKind {
     }
 }
 
-/// Walk `root` one level deep and classify each subdirectory that looks
-/// like a project (has at least one recognised manifest or a `.git` dir).
+/// Max directory depth below a root that `scan_root` descends into.
+/// Root children are depth 1, so this covers tools/apps nested several
+/// folders deep ("sub of subs and etc") while bounding the walk cost.
+const MAX_SCAN_DEPTH: usize = 6;
+
+/// True for build-output / VCS / cache dirs we never descend into and
+/// never treat as projects. Hidden (`.`-prefixed) dirs are pruned too —
+/// that covers `.git`, `.next`, `.turbo`, `.venv`, `.idea`, etc.
+fn is_skip_dir(name: &str) -> bool {
+    if name.starts_with('.') {
+        return true;
+    }
+    matches!(
+        name,
+        "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+            | "out"
+            | "__pycache__"
+            | "vendor"
+            | "venv"
+            | "coverage"
+            | "bin"
+            | "obj"
+    )
+}
+
+/// Walk `root` recursively and classify every directory that looks like a
+/// project (has a recognised manifest or a `.git` dir). Descends THROUGH
+/// project folders too, so a repo that contains nested tools/apps surfaces
+/// both the repo and each nested sub-project. Prunes noise dirs
+/// (`is_skip_dir`) and stops at `MAX_SCAN_DEPTH`.
 pub fn scan_root(root: &Path) -> AppResult<Vec<ProjectInfo>> {
     let mut out = Vec::new();
     if !root.is_dir() {
         return Ok(out);
     }
-    for entry in std::fs::read_dir(root)? {
-        let entry = entry?;
+    let walker = WalkDir::new(root)
+        .max_depth(MAX_SCAN_DEPTH)
+        .into_iter()
+        // Prune noise/hidden subtrees before walking into them. The root
+        // itself (depth 0) is always kept; it's skipped from classification
+        // below so we never list the root dir as a project.
+        .filter_entry(|e| {
+            if e.depth() == 0 || !e.file_type().is_dir() {
+                return true;
+            }
+            !is_skip_dir(e.file_name().to_str().unwrap_or(""))
+        });
+    for entry in walker.filter_map(|e| e.ok()) {
+        if entry.depth() == 0 || !entry.file_type().is_dir() {
+            continue;
+        }
         let path = entry.path();
-        if !path.is_dir() {
+        if !looks_like_project(path) {
             continue;
         }
-        // Skip hidden / OS / cache dirs.
-        let name = entry
-            .file_name()
-            .to_str()
-            .unwrap_or("")
-            .to_string();
-        if name.starts_with('.') || name == "node_modules" || name == "target" {
-            continue;
-        }
-        if !looks_like_project(&path) {
-            continue;
-        }
-        match scan_project(&path) {
+        match scan_project(path) {
             Ok(info) => out.push(info),
             Err(e) => tracing::warn!(?path, error=?e, "scan_project failed"),
         }
     }
-    out.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+    // Sort by path so nested sub-projects sort directly under their parent
+    // (and same-named folders like many `web`/`api` stay deterministic).
+    out.sort_by(|a, b| a.abs_path.to_ascii_lowercase().cmp(&b.abs_path.to_ascii_lowercase()));
     Ok(out)
 }
 
@@ -280,4 +315,45 @@ pub fn enumerate_manifest_paths(path: &Path) -> Vec<PathBuf> {
         .filter(|e| e.file_type().is_file())
         .map(|e| e.into_path())
         .collect()
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn touch(dir: &Path, rel: &str, content: &str) {
+        let p = dir.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, content).unwrap();
+    }
+
+    #[test]
+    fn scan_root_descends_through_projects_and_prunes_noise() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        // A repo that is itself a project AND nests tools/apps several deep.
+        touch(root, "myproj/Cargo.toml", "[package]\nname=\"m\"\nversion=\"0.1.0\"");
+        touch(root, "myproj/tools/codegen/package.json", "{\"name\":\"codegen\"}");
+        touch(root, "myproj/apps/web/ui/package.json", "{\"name\":\"ui\"}"); // depth 4
+        // Noise that must NOT be discovered even though it has a manifest.
+        touch(root, "myproj/node_modules/dep/package.json", "{\"name\":\"dep\"}");
+        touch(root, "myproj/target/debug/build/x/Cargo.toml", "[package]\nname=\"x\"\nversion=\"0\"");
+        // A separate top-level standalone project.
+        touch(root, "standalone/go.mod", "module standalone\n");
+
+        let found = scan_root(root).unwrap();
+        let paths: Vec<String> = found.iter().map(|p| p.abs_path.replace('\\', "/")).collect();
+
+        let has = |needle: &str| paths.iter().any(|p| p.ends_with(needle));
+        assert!(has("myproj"), "parent repo missing: {paths:?}");
+        assert!(has("myproj/tools/codegen"), "nested tool missing: {paths:?}");
+        assert!(has("myproj/apps/web/ui"), "deeply-nested app missing: {paths:?}");
+        assert!(has("standalone"), "standalone project missing: {paths:?}");
+        assert!(
+            !paths.iter().any(|p| p.contains("node_modules") || p.contains("/target/")),
+            "noise dir was scanned as a project: {paths:?}"
+        );
+        assert_eq!(found.len(), 4, "expected exactly 4 projects, got {paths:?}");
+    }
 }
