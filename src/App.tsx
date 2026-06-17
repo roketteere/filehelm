@@ -87,7 +87,7 @@ export default function App() {
   // A plain (non-project) folder selected in the tree. Project selection
   // (selectedId) takes precedence in the detail pane; this clears whenever
   // a project becomes selected (effect below).
-  const [selectedFolder, setSelectedFolder] = useState<{ path: string; name: string } | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<{ path: string; name: string; isProject: boolean } | null>(null);
   const [rootsOpen, setRootsOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -393,9 +393,9 @@ export default function App() {
               selectedId={selectedId}
               selectedPath={selectedPath}
               onSelect={(p) => setSelectedId(p.id)}
-              onSelectFolder={(path, name) => {
+              onSelectFolder={(path, name, isProject) => {
                 setSelectedId(null);
-                setSelectedFolder({ path, name });
+                setSelectedFolder({ path, name, isProject });
               }}
               onReorder={refreshProjects}
             />
@@ -414,7 +414,11 @@ export default function App() {
                 }}
               />
             ) : selectedFolder ? (
-              <FolderView path={selectedFolder.path} name={selectedFolder.name} />
+              <FolderView
+                path={selectedFolder.path}
+                name={selectedFolder.name}
+                isProject={selectedFolder.isProject}
+              />
             ) : (
               <EmptyState
                 hasRoots={roots.length > 0}

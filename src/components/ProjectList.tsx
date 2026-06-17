@@ -55,9 +55,11 @@ interface Props {
    *  the selected folder. */
   selectedPath?: string | null;
   onSelect: (p: Project) => void;
-  /** Select a plain (non-project) folder by path → detail shows a
-   *  "no scripts here" folder view. */
-  onSelectFolder?: (path: string, name: string) => void;
+  /** Select a folder that isn't a registered project. `isProject` is the
+   *  live filesystem verdict (has a manifest) — true means it's a project
+   *  that just hasn't been scanned into the DB yet, so the folder view can
+   *  say "rescan to load scripts" instead of "no manifest". */
+  onSelectFolder?: (path: string, name: string, isProject: boolean) => void;
   /** Trigger a project list refresh after sort_order changes from
    *  drag-reorder or context-menu mutations. App.tsx provides
    *  refreshProjects(). */
@@ -588,7 +590,7 @@ function TreeChildren({
   projectsByPath: Map<string, Project>;
   selectedPath: string | null;
   onSelect: (p: Project) => void;
-  onSelectFolder?: (path: string, name: string) => void;
+  onSelectFolder?: (path: string, name: string, isProject: boolean) => void;
   onRefresh: () => void | Promise<void>;
 }) {
   const [children, setChildren] = useState<ChildDir[] | null>(null);
@@ -653,7 +655,7 @@ function TreeNode({
   projectsByPath: Map<string, Project>;
   selectedPath: string | null;
   onSelect: (p: Project) => void;
-  onSelectFolder?: (path: string, name: string) => void;
+  onSelectFolder?: (path: string, name: string, isProject: boolean) => void;
   onRefresh: () => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -666,7 +668,7 @@ function TreeNode({
     if (project) {
       onSelect(project);
     } else {
-      onSelectFolder?.(node.path, node.name);
+      onSelectFolder?.(node.path, node.name, node.is_project);
       if (node.has_children) setExpanded(true);
     }
   };
@@ -706,12 +708,17 @@ function TreeNode({
           <LanguageIcon slug={slug} size={13} />
         </span>
       ) : expanded ? (
-        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-rose-400/80" />
+        <FolderOpen
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            project || node.is_project ? "text-rose-400/80" : "text-muted-foreground",
+          )}
+        />
       ) : (
         <Folder
           className={cn(
             "h-3.5 w-3.5 shrink-0",
-            project ? "text-rose-400/80" : "text-muted-foreground",
+            project || node.is_project ? "text-rose-400/80" : "text-muted-foreground",
           )}
         />
       )}

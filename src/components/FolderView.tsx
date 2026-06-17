@@ -8,7 +8,17 @@ import { revealLabel } from "@/lib/platform";
  *  "no scripts here" state the user expects when clicking any folder.
  *  Folders that DO contain scripts are registered projects and render
  *  ProjectDetail instead. */
-export function FolderView({ path, name }: { path: string; name: string }) {
+export function FolderView({
+  path,
+  name,
+  isProject = false,
+}: {
+  path: string;
+  name: string;
+  /** Filesystem says this folder has a project manifest, but it isn't in
+   *  the DB yet → tell the user to rescan rather than "no manifest". */
+  isProject?: boolean;
+}) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-border px-6 py-4">
@@ -20,9 +30,19 @@ export function FolderView({ path, name }: { path: string; name: string }) {
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="max-w-sm text-sm text-muted-foreground">
-          No runnable scripts in this folder. It has no recognised project
-          manifest. Expand it in the tree to browse subfolders — any that are
-          projects will show their scripts.
+          {isProject ? (
+            <>
+              This folder looks like a project, but its scripts aren't loaded
+              yet. Rescan its root (right-click the root → Rescan now) to pick
+              it up.
+            </>
+          ) : (
+            <>
+              No runnable scripts in this folder. It has no recognised project
+              manifest. Expand it in the tree to browse subfolders — any that
+              are projects will show their scripts.
+            </>
+          )}
         </div>
         <div className="flex gap-2">
           <Button
