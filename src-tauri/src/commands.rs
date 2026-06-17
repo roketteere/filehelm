@@ -346,6 +346,63 @@ pub async fn project_readme(id: i64) -> AppResult<Option<String>> {
     Ok(None)
 }
 
+/// One immediate child directory of a path, for the lazy sidebar tree.
+#[derive(Serialize)]
+pub struct ChildDir {
+    pub name: String,
+    pub path: String,
+    /// True if the dir has a recognised project manifest (selectable → shows
+    /// scripts). False dirs are pure navigation containers.
+    pub is_project: bool,
+    /// True if it contains at least one non-noise subdirectory (→ show an
+    /// expand chevron). Computed one level deep, cheaply.
+    pub has_children: bool,
+}
+
+/// List the immediate child directories of `path` for the file tree.
+/// Prunes build-output / VCS / cache / hidden dirs (scanner::is_skip_dir).
+/// Lazy: the frontend calls this per node on expand, so we never walk the
+/// whole tree at once.
+#[tauri::command]
+pub async fn list_child_dirs(path: String) -> AppResult<Vec<ChildDir>> {
+    let base = PathBuf::from(&path);
+    let mut out = Vec::new();
+    let rd = match std::fs::read_dir(&base) {
+        Ok(rd) => rd,
+        // Unreadable dir (permissions, vanished) → empty, not an error: a
+        // tree node that can't be expanded just shows nothing.
+        Err(_) => return Ok(out),
+    };
+    for entry in rd.flatten() {
+        let Ok(ft) = entry.file_type() else { continue };
+        if !ft.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if scanner::is_skip_dir(&name) {
+            continue;
+        }
+        let p = entry.path();
+        let has_children = std::fs::read_dir(&p)
+            .map(|inner| {
+                inner.flatten().any(|e| {
+                    e.file_type().map(|t| t.is_dir()).unwrap_or(false)
+                        && !scanner::is_skip_dir(&e.file_name().to_string_lossy())
+                })
+            })
+            .unwrap_or(false);
+        let is_project = scanner::looks_like_project(&p);
+        out.push(ChildDir {
+            name,
+            path: p.to_string_lossy().to_string(),
+            is_project,
+            has_children,
+        });
+    }
+    out.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+    Ok(out)
+}
+
 #[derive(Serialize)]
 pub struct RunOutcome {
     /// External-launch id the frontend uses to kill the spawned terminal.

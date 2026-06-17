@@ -3,6 +3,7 @@ import type {
   ActionChainRow,
   BackupResult,
   BranchInfo,
+  ChildDir,
   CloneResult,
   DetectedUrl,
   DirEntry,
@@ -40,6 +41,8 @@ export const ipc = {
     invoke<ProjectAction[]>("project_actions", { id }),
   projectReadme: (id: number) =>
     invoke<string | null>("project_readme", { id }),
+  listChildDirs: (path: string) =>
+    invoke<ChildDir[]>("list_child_dirs", { path }),
   runAction: (actionId: number) =>
     invoke<RunOutcome>("run_action", { actionId }),
   killExternalLaunch: (launchId: number) =>

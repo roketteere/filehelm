@@ -29,6 +29,14 @@ export interface Project {
   sort_order?: number;
 }
 
+/** One immediate child directory in the lazy sidebar file tree. */
+export interface ChildDir {
+  name: string;
+  path: string;
+  is_project: boolean;
+  has_children: boolean;
+}
+
 export type ActionKind =
   | "dev"
   | "build"

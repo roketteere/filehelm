@@ -37,7 +37,7 @@ import { splitPath } from "@/lib/path";
 import { revealLabel, openTerminalLabel } from "@/lib/platform";
 import { prefs, type SortMode } from "@/lib/prefs";
 import { cn, formatRelative } from "@/lib/utils";
-import type { Project, Root } from "@/types";
+import type { ChildDir, Project, Root } from "@/types";
 
 const ICON_OPTIONS = [
   "rust", "node", "typescript", "javascript", "python", "go",
@@ -50,7 +50,14 @@ interface Props {
   roots: Root[];
   projects: Project[];
   selectedId: number | null;
+  /** abs_path of the current selection (project OR plain folder), for
+   *  highlighting tree rows. App derives it from the selected project or
+   *  the selected folder. */
+  selectedPath?: string | null;
   onSelect: (p: Project) => void;
+  /** Select a plain (non-project) folder by path → detail shows a
+   *  "no scripts here" folder view. */
+  onSelectFolder?: (path: string, name: string) => void;
   /** Trigger a project list refresh after sort_order changes from
    *  drag-reorder or context-menu mutations. App.tsx provides
    *  refreshProjects(). */
@@ -62,7 +69,9 @@ export function ProjectList({
   roots,
   projects,
   selectedId,
+  selectedPath,
   onSelect,
+  onSelectFolder,
   onReorder,
   onRootsChanged,
 }: Props) {
@@ -105,6 +114,15 @@ export function ProjectList({
   const fullCount = useMemo(() => {
     const m = new Map<number, number>();
     for (const p of projects) m.set(p.root_id, (m.get(p.root_id) ?? 0) + 1);
+    return m;
+  }, [projects]);
+
+  // Path → project lookup so a tree node can tell if its folder is a
+  // registered project (selectable, shows scripts) and reuse its row +
+  // context menu. Keyed lowercased for case-insensitive Windows paths.
+  const projectsByPath = useMemo(() => {
+    const m = new Map<string, Project>();
+    for (const p of projects) m.set(p.abs_path.toLowerCase(), p);
     return m;
   }, [projects]);
 
@@ -199,7 +217,23 @@ export function ProjectList({
                     isQueryActive={isQueryActive}
                   />
                 </RootContextMenu>
-                {!collapsed && (
+                {!collapsed && !isQueryActive && (
+                  <ul className="mt-0.5 space-y-0.5 pl-3 border-l border-border/60 ml-3">
+                    {/* Browse mode: lazy filesystem tree rooted at the root
+                        dir. Every subfolder is navigable; folders that are
+                        registered projects are selectable + show scripts. */}
+                    <TreeChildren
+                      path={root.abs_path}
+                      depth={0}
+                      projectsByPath={projectsByPath}
+                      selectedPath={selectedPath ?? null}
+                      onSelect={onSelect}
+                      onSelectFolder={onSelectFolder}
+                      onRefresh={() => onReorder?.()}
+                    />
+                  </ul>
+                )}
+                {!collapsed && isQueryActive && (
                   <ul className="mt-0.5 space-y-0.5 pl-3 border-l border-border/60 ml-3">
                     {total === 0 ? (
                       <li className="px-3 py-2 text-[11px] italic text-muted-foreground">
@@ -530,6 +564,215 @@ function RootContextMenu({
         <ContextMenuSeparator />
         <ContextMenuItem destructive onSelect={remove}>
           <Trash2 /> Remove root
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+// ---- lazy filesystem tree ----
+
+/** Loads + renders the immediate child folders of `path`. Lazy: only
+ *  mounts (and fetches) when its parent node is expanded. */
+function TreeChildren({
+  path,
+  depth,
+  projectsByPath,
+  selectedPath,
+  onSelect,
+  onSelectFolder,
+  onRefresh,
+}: {
+  path: string;
+  depth: number;
+  projectsByPath: Map<string, Project>;
+  selectedPath: string | null;
+  onSelect: (p: Project) => void;
+  onSelectFolder?: (path: string, name: string) => void;
+  onRefresh: () => void | Promise<void>;
+}) {
+  const [children, setChildren] = useState<ChildDir[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setChildren(null);
+    setFailed(false);
+    ipc
+      .listChildDirs(path)
+      .then((c) => alive && setChildren(c))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+
+  if (failed) {
+    return <li className="px-2 py-1 text-[11px] italic text-muted-foreground">can't read folder</li>;
+  }
+  if (children === null) {
+    return <li className="px-2 py-1 text-[11px] italic text-muted-foreground/60">loading…</li>;
+  }
+  if (children.length === 0) {
+    // Only annotate emptiness at the top level; deeper empties stay silent.
+    return depth === 0 ? (
+      <li className="px-2 py-1 text-[11px] italic text-muted-foreground/60">no subfolders</li>
+    ) : null;
+  }
+  return (
+    <>
+      {children.map((c) => (
+        <TreeNode
+          key={c.path}
+          node={c}
+          depth={depth}
+          projectsByPath={projectsByPath}
+          selectedPath={selectedPath}
+          onSelect={onSelect}
+          onSelectFolder={onSelectFolder}
+          onRefresh={onRefresh}
+        />
+      ))}
+    </>
+  );
+}
+
+/** A single folder node. Project folders are selectable (→ scripts) and
+ *  carry the full project context menu; plain folders are containers you
+ *  expand or select to see "no scripts". */
+function TreeNode({
+  node,
+  depth,
+  projectsByPath,
+  selectedPath,
+  onSelect,
+  onSelectFolder,
+  onRefresh,
+}: {
+  node: ChildDir;
+  depth: number;
+  projectsByPath: Map<string, Project>;
+  selectedPath: string | null;
+  onSelect: (p: Project) => void;
+  onSelectFolder?: (path: string, name: string) => void;
+  onRefresh: () => void | Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const project = projectsByPath.get(node.path.toLowerCase());
+  const isSel =
+    selectedPath != null && selectedPath.toLowerCase() === node.path.toLowerCase();
+  const slug = project ? project.custom_icon_slug || project.primary_language : null;
+
+  const rowClick = () => {
+    if (project) {
+      onSelect(project);
+    } else {
+      onSelectFolder?.(node.path, node.name);
+      if (node.has_children) setExpanded(true);
+    }
+  };
+
+  const row = (
+    <div
+      onClick={rowClick}
+      title={node.path}
+      style={{ paddingLeft: `${depth * 12 + 4}px` }}
+      className={cn(
+        "group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1.5 text-left text-sm transition-colors",
+        "hover:bg-accent/60",
+        isSel && "bg-accent text-accent-foreground ring-1 ring-primary/40",
+      )}
+    >
+      {node.has_children ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded((v) => !v);
+          }}
+          className="grid h-4 w-4 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent"
+          aria-label={expanded ? "Collapse" : "Expand"}
+        >
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
+        </button>
+      ) : (
+        <span className="h-4 w-4 shrink-0" />
+      )}
+      {project && slug ? (
+        <span className="grid h-4 w-4 shrink-0 place-items-center">
+          <LanguageIcon slug={slug} size={13} />
+        </span>
+      ) : expanded ? (
+        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-rose-400/80" />
+      ) : (
+        <Folder
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            project ? "text-rose-400/80" : "text-muted-foreground",
+          )}
+        />
+      )}
+      <span className={cn("truncate", project ? "font-medium" : "text-muted-foreground")}>
+        {node.name}
+      </span>
+      {project?.pinned && <Pin className="h-3 w-3 shrink-0 text-primary" aria-label="pinned" />}
+    </div>
+  );
+
+  return (
+    <li>
+      {project ? (
+        <ProjectContextMenu
+          project={project}
+          onSelect={() => onSelect(project)}
+          onRefresh={onRefresh}
+        >
+          {row}
+        </ProjectContextMenu>
+      ) : (
+        <FolderContextMenu path={node.path}>{row}</FolderContextMenu>
+      )}
+      {expanded && (
+        <ul className="ml-2 space-y-0.5 border-l border-border/40">
+          <TreeChildren
+            path={node.path}
+            depth={depth + 1}
+            projectsByPath={projectsByPath}
+            selectedPath={selectedPath}
+            onSelect={onSelect}
+            onSelectFolder={onSelectFolder}
+            onRefresh={onRefresh}
+          />
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function FolderContextMenu({
+  path,
+  children,
+}: {
+  path: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel className="max-w-[240px] truncate">{path}</ContextMenuLabel>
+        <ContextMenuItem onSelect={() => ipc.revealPath(path).catch(() => {})}>
+          <FolderOpen /> {revealLabel()}
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            navigator.clipboard.writeText(path).catch(() => {});
+          }}
+        >
+          <Copy /> Copy path
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

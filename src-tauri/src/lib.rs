@@ -173,6 +173,7 @@ pub fn run() {
             commands::rescan_project,
             commands::project_actions,
             commands::project_readme,
+            commands::list_child_dirs,
             commands::run_action,
             commands::open_in_editor,
             commands::open_path_in_editor,

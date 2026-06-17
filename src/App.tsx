@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProjectList } from "@/components/ProjectList";
 import { ProjectDetail } from "@/components/ProjectDetail";
+import { FolderView } from "@/components/FolderView";
 import { ThemePicker } from "@/components/ThemePicker";
 import { TitleBar } from "@/components/TitleBar";
 import { SortPicker } from "@/components/SortPicker";
@@ -83,6 +84,10 @@ export default function App() {
   const [roots, setRoots] = useState<Root[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // A plain (non-project) folder selected in the tree. Project selection
+  // (selectedId) takes precedence in the detail pane; this clears whenever
+  // a project becomes selected (effect below).
+  const [selectedFolder, setSelectedFolder] = useState<{ path: string; name: string } | null>(null);
   const [rootsOpen, setRootsOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -206,6 +211,16 @@ export default function App() {
     () => projects.find((p) => p.id === selectedId) ?? null,
     [projects, selectedId],
   );
+
+  // Selecting any project clears a pending folder selection so the detail
+  // pane shows the project, not a stale "no scripts" folder view.
+  useEffect(() => {
+    if (selectedId != null) setSelectedFolder(null);
+  }, [selectedId]);
+
+  // abs_path of whatever is selected (project or plain folder), for tree
+  // row highlighting.
+  const selectedPath = selectedFolder?.path ?? selected?.abs_path ?? null;
 
   const scanAll = useCallback(async () => {
     setScanning(true);
@@ -376,7 +391,12 @@ export default function App() {
               roots={roots}
               projects={projects}
               selectedId={selectedId}
+              selectedPath={selectedPath}
               onSelect={(p) => setSelectedId(p.id)}
+              onSelectFolder={(path, name) => {
+                setSelectedId(null);
+                setSelectedFolder({ path, name });
+              }}
               onReorder={refreshProjects}
             />
           </aside>
@@ -393,6 +413,8 @@ export default function App() {
                   refreshProjects();
                 }}
               />
+            ) : selectedFolder ? (
+              <FolderView path={selectedFolder.path} name={selectedFolder.name} />
             ) : (
               <EmptyState
                 hasRoots={roots.length > 0}

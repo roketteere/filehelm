@@ -98,7 +98,7 @@ const MAX_SCAN_DEPTH: usize = 6;
 /// True for build-output / VCS / cache dirs we never descend into and
 /// never treat as projects. Hidden (`.`-prefixed) dirs are pruned too —
 /// that covers `.git`, `.next`, `.turbo`, `.venv`, `.idea`, etc.
-fn is_skip_dir(name: &str) -> bool {
+pub(crate) fn is_skip_dir(name: &str) -> bool {
     if name.starts_with('.') {
         return true;
     }
@@ -199,7 +199,7 @@ fn action_kind_order(k: ActionKind) -> u8 {
     }
 }
 
-fn looks_like_project(path: &Path) -> bool {
+pub(crate) fn looks_like_project(path: &Path) -> bool {
     const MARKERS: &[&str] = &[
         "package.json",
         "Cargo.toml",
