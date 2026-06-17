@@ -220,13 +220,26 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
         });
         setRunning((prev) => new Set(prev).add(a.id));
       } else {
-        // External Windows Terminal: tracked via launch_id. Click the
-        // card again, or the panel's Kill button, to taskkill /T /F.
-        const outcome = await ipc.runAction(a.id);
-        setExternalLaunches((prev) =>
-          new Map(prev).set(a.id, outcome.launch_id),
-        );
+        // External terminal launch. We spawn a VISIBLE shell with -NoExit
+        // (runner.rs) so the user can read the output — which means the
+        // process never exits on its own, so we CANNOT observe when the
+        // *command* finishes (only when the user closes the window). So an
+        // external run is fire-and-forget: flash the card briefly as launch
+        // confirmation, then return it to Play. (Embedded mode runs
+        // `cmd /C` in a PTY that exits + fires pty-exit, so it keeps the
+        // real running/stop lifecycle below.)
+        // @brk: don't latch `running` on the external-exit event here — with
+        // -NoExit that event only fires on manual window close, which made
+        // every card appear stuck "running" forever.
+        await ipc.runAction(a.id);
         setRunning((prev) => new Set(prev).add(a.id));
+        window.setTimeout(() => {
+          setRunning((prev) => {
+            const next = new Set(prev);
+            next.delete(a.id);
+            return next;
+          });
+        }, 1200);
       }
     } catch (e) {
       setError(`Run failed: ${e}`);
@@ -293,38 +306,10 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
     return () => cleanups.forEach((off) => off());
   }, [externalLaunches]);
 
-  // On mount, ask the backend which external launches are alive so the
-  // running state survives a window hide/show via the tray.
-  useEffect(() => {
-    let cancelled = false;
-    ipc
-      .listExternalLaunches()
-      .then((launches) => {
-        if (cancelled) return;
-        const relevant = launches.filter((l) =>
-          actions.some((a) => a.id === l.action_id),
-        );
-        if (relevant.length === 0) return;
-        setExternalLaunches((prev) => {
-          const next = new Map(prev);
-          for (const l of relevant) next.set(l.action_id, l.launch_id);
-          return next;
-        });
-        setRunning((prev) => {
-          const next = new Set(prev);
-          for (const l of relevant) next.add(l.action_id);
-          return next;
-        });
-      })
-      .catch(() => {
-        // not in Tauri or backend older than this commit
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Re-run whenever the action list changes so newly-loaded projects
-    // pick up their already-running launches.
-  }, [actions]);
+  // (Removed: boot-rehydrate of "running" external launches. External
+  // runs are fire-and-forget now — a visible -NoExit terminal stays open
+  // indefinitely, so treating an open window as a "running" card is what
+  // made every script appear stuck loading, including across reloads.)
 
   const rescan = async () => {
     setLoading(true);
