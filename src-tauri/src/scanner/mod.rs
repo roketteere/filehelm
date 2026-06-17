@@ -167,9 +167,12 @@ pub fn scan_project(path: &Path) -> AppResult<ProjectInfo> {
         .to_string();
 
     let classification = classifier::classify(path)?;
+    // Only real, executable scripts become actions (package.json scripts,
+    // Cargo bins, Makefile/Justfile targets, .vscode tasks, compose, etc.).
+    // README/CLAUDE markdown fenced blocks are NOT runnable — they're docs,
+    // read them in the README tab. See readme::extract_runnables (kept for
+    // potential future "snippets" surface, but no longer fed into actions).
     let mut runnables = runnables::extract(path)?;
-    let readme_runnables = readme::extract_runnables(path)?;
-    runnables.extend(readme_runnables);
     // Stable ordering: dev → build → test → run → lint → format → other.
     runnables.sort_by_key(|r| (action_kind_order(r.kind), r.label.to_ascii_lowercase()));
 

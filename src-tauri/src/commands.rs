@@ -222,6 +222,24 @@ pub async fn scan_root(root_id: i64) -> AppResult<ScanReport> {
         "scan_root: upsert loop finished"
     );
 
+    // Purge legacy README/CLAUDE-derived auto-actions. Markdown blocks are
+    // no longer runnable (they're docs), but projects whose signature hash
+    // didn't change this scan skip the action rewrite in upsert_project, so
+    // stale `*.md#N`-sourced rows would otherwise linger. User overrides
+    // (is_user_override = 1) are preserved. @dep: scanner::scan_project no
+    // longer feeds readme runnables into actions.
+    let purged = sqlx::query(
+        "DELETE FROM project_actions \
+         WHERE is_user_override = 0 AND source LIKE '%.md#%' \
+         AND project_id IN (SELECT id FROM projects WHERE root_id = ?)",
+    )
+    .bind(root_id)
+    .execute(&state().db)
+    .await?;
+    if purged.rows_affected() > 0 {
+        tracing::info!(root_id, rows = purged.rows_affected(), "scan_root: purged legacy markdown actions");
+    }
+
     // Prune projects that were under this root but no longer exist.
     if seen_paths.is_empty() {
         let res = sqlx::query("DELETE FROM projects WHERE root_id = ?")

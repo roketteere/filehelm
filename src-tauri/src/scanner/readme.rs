@@ -6,6 +6,12 @@
 //! `cmd` is treated as candidate commands; the first line of each block is
 //! taken as the command (multi-line scripts are surfaced as-is so the user
 //! can pick).
+//!
+//! NOTE: As of the "drop markdown as runnable" change, this module is no
+//! longer wired into `scan_project` — markdown blocks are docs, not
+//! actions. Kept intact (and dead-code-allowed) for a possible future
+//! read-only "snippets from README" surface.
+#![allow(dead_code)]
 
 use std::path::Path;
 

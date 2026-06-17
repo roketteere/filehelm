@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import {
   Code2,
   FolderOpen,
@@ -58,6 +58,22 @@ import { cn, formatRelative } from "@/lib/utils";
 import { labelFor } from "@/lib/devicon-map";
 import type { DetectedUrl, Project, ProjectAction } from "@/types";
 
+// Action cards are grouped under these type headers, in this order.
+// Mirrors the backend's action_kind_order in scanner/mod.rs.
+const ACTION_KIND_ORDER = ["dev", "build", "test", "run", "lint", "format", "other"] as const;
+const KIND_LABELS: Record<string, string> = {
+  dev: "Dev",
+  build: "Build",
+  test: "Test",
+  run: "Run",
+  lint: "Lint",
+  format: "Format",
+  other: "Other",
+};
+function kindLabel(kind: string): string {
+  return KIND_LABELS[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
 interface Props {
   project: Project;
   onRescanned: (p: Project) => void;
@@ -66,6 +82,17 @@ interface Props {
 
 export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
   const [actions, setActions] = useState<ProjectAction[]>([]);
+  // Bucket actions by kind so the list renders under type headers
+  // (Dev / Build / Test / …). Empty buckets are dropped at render time.
+  const groupedActions = useMemo(() => {
+    const m = new Map<string, ProjectAction[]>();
+    for (const a of actions) {
+      const arr = m.get(a.kind) ?? [];
+      arr.push(a);
+      m.set(a.kind, arr);
+    }
+    return m;
+  }, [actions]);
   const [readme, setReadme] = useState<string | null>(null);
   const [changelog, setChangelog] = useState<string | null>(null);
   const [devUrl, setDevUrl] = useState<DetectedUrl | null>(null);
@@ -475,8 +502,15 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                   README.
                 </div>
               ) : (
-                <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {actions.map((a) => {
+                ACTION_KIND_ORDER.filter((k) => (groupedActions.get(k)?.length ?? 0) > 0).map((kind) => (
+                <div key={kind} className="mb-4 last:mb-0">
+                  <div className="mb-1.5 flex items-center gap-2 px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <span>{kindLabel(kind)}</span>
+                    <span className="text-muted-foreground/50">{groupedActions.get(kind)!.length}</span>
+                    <span className="h-px flex-1 bg-border/60" />
+                  </div>
+                  <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {groupedActions.get(kind)!.map((a) => {
                     const isRunning = running.has(a.id);
                     return (
                     <li key={a.id}>
@@ -607,7 +641,9 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                     </li>
                     );
                   })}
-                </ul>
+                  </ul>
+                </div>
+                ))
               )}
               <div className="mt-6 text-xs text-muted-foreground">
                 Last scanned {formatRelative(project.last_scanned_at)}.
