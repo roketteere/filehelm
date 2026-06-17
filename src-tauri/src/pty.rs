@@ -81,7 +81,7 @@ pub fn spawn<R: Runtime>(
         .take_writer()
         .map_err(|e| AppError::Other(anyhow!("take_writer: {e}")))?;
 
-    SESSIONS.lock().unwrap().insert(
+    SESSIONS.lock().unwrap_or_else(|e| e.into_inner()).insert(
         session_id.clone(),
         Session {
             master: pair.master,
@@ -111,7 +111,7 @@ pub fn spawn<R: Runtime>(
             }
         }
         // EOF — clean up + notify.
-        SESSIONS.lock().unwrap().remove(&sid);
+        SESSIONS.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
         let _ = app_clone.emit(
             &format!("filehelm:pty-exit:{sid}"),
             PtyExit {
@@ -125,7 +125,7 @@ pub fn spawn<R: Runtime>(
 }
 
 pub fn write(session_id: &str, data: &str) -> AppResult<()> {
-    let mut sessions = SESSIONS.lock().unwrap();
+    let mut sessions = SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
     let Some(s) = sessions.get_mut(session_id) else {
         return Err(AppError::NotFound(format!("pty session {session_id}")));
     };
@@ -137,7 +137,7 @@ pub fn write(session_id: &str, data: &str) -> AppResult<()> {
 }
 
 pub fn resize(session_id: &str, rows: u16, cols: u16) -> AppResult<()> {
-    let sessions = SESSIONS.lock().unwrap();
+    let sessions = SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
     let Some(s) = sessions.get(session_id) else {
         return Err(AppError::NotFound(format!("pty session {session_id}")));
     };
@@ -153,7 +153,7 @@ pub fn resize(session_id: &str, rows: u16, cols: u16) -> AppResult<()> {
 }
 
 pub fn kill(session_id: &str) -> AppResult<()> {
-    let mut sessions = SESSIONS.lock().unwrap();
+    let mut sessions = SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
     if sessions.remove(session_id).is_some() {
         Ok(())
     } else {

@@ -28,6 +28,7 @@ import { LanguageIcon } from "@/components/LanguageIcon";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
 import { FileTree } from "@/components/FileTree";
 import { ipc } from "@/lib/ipc";
+import { joinPath } from "@/lib/platform";
 import {
   getReadme,
   getRepo,
@@ -88,8 +89,7 @@ export function GithubDialog({ open, onOpenChange, defaultParent, onCloned }: Pr
   // Recompute default destination when a repo is loaded.
   useEffect(() => {
     if (repo && defaultParent) {
-      const sep = defaultParent.endsWith("\\") || defaultParent.endsWith("/") ? "" : "\\";
-      setDest(`${defaultParent}${sep}${repo.name}`);
+      setDest(joinPath(defaultParent, repo.name));
     }
   }, [repo, defaultParent]);
 
@@ -138,8 +138,7 @@ export function GithubDialog({ open, onOpenChange, defaultParent, onCloned }: Pr
       title: "Pick destination folder for the clone",
     });
     if (typeof picked === "string" && repo) {
-      const sep = picked.endsWith("\\") || picked.endsWith("/") ? "" : "\\";
-      setDest(`${picked}${sep}${repo.name}`);
+      setDest(joinPath(picked, repo.name));
     }
   };
 

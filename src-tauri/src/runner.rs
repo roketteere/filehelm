@@ -140,13 +140,13 @@ fn register_launch<R: Runtime>(app: AppHandle<R>, action_id: i64, mut child: Chi
     let pid = child.id();
     EXTERNAL_LAUNCHES
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .insert(launch_id, LaunchTracker { pid, action_id });
 
     let app_for_thread = app.clone();
     std::thread::spawn(move || {
         let _ = child.wait();
-        EXTERNAL_LAUNCHES.lock().unwrap().remove(&launch_id);
+        EXTERNAL_LAUNCHES.lock().unwrap_or_else(|e| e.into_inner()).remove(&launch_id);
         let _ = app_for_thread.emit(
             &format!("filehelm:external-exit:{launch_id}"),
             ExternalExit {
@@ -169,7 +169,7 @@ struct ExternalExit {
 /// `taskkill /T /F` to take down the whole process tree (the wt.exe
 /// window plus the pwsh/cmd it hosts plus whatever they spawned).
 pub fn kill_external_launch(launch_id: i64) -> AppResult<()> {
-    let tracker = EXTERNAL_LAUNCHES.lock().unwrap().remove(&launch_id);
+    let tracker = EXTERNAL_LAUNCHES.lock().unwrap_or_else(|e| e.into_inner()).remove(&launch_id);
     let Some(t) = tracker else {
         return Err(AppError::NotFound(format!(
             "external launch {launch_id} not running"
@@ -198,7 +198,7 @@ pub fn kill_external_launch(launch_id: i64) -> AppResult<()> {
 pub fn list_external_launches() -> Vec<(i64, i64)> {
     EXTERNAL_LAUNCHES
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .iter()
         .map(|(launch_id, t)| (*launch_id, t.action_id))
         .collect()
