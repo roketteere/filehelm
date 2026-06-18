@@ -9,22 +9,49 @@ Co-authored by **Joel Perez** ([@roketteere](https://github.com/roketteere))
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-06-18
+
+### Added
+
+- **Nested sub-project discovery.** The scanner now recurses through each
+  root (descending *into* project folders too), so tools/apps nested
+  several levels deep surface as their own entries. Build-output / VCS /
+  cache dirs are pruned; depth-capped. (`src-tauri/src/scanner/mod.rs`)
+- **Lazy every-subfolder file tree.** The sidebar is now an expandable
+  filesystem tree — click any folder to drill in. Project folders show
+  their scripts; plain folders show a "no scripts here" view.
+  (`list_child_dirs`, `ProjectList`, `FolderView`)
+
+### Changed
+
+- **In-app terminal is the default runner, with a working Stop.** Runs
+  stream into an embedded xterm with a real Kill button and exit
+  detection; Stop now `taskkill /T`s the whole process tree so dev
+  servers (vite+cargo under `pnpm tauri dev`) actually die. External
+  Windows Terminal launch remains a Settings opt-in (fire-and-forget).
+- **Scripts grouped by type** (Dev / Build / Test / Run / Lint / Format /
+  Other) in the action list.
+
 ### Fixed
 
-- **Action launch buttons actually launch — and Stop actually stops.**
-  External action runs were routed through `wt.exe`, which is a thin
-  launcher that hands the session to the WindowsTerminal broker and
-  exits immediately. Consequences: the tracked child PID died within
-  milliseconds, the action card's running state reverted instantly
-  (looking like the button "did nothing"), and Stop's
-  `taskkill /T /F` hit an already-dead PID while the real terminal
-  lived on. On top of that the launch line hardcoded `pwsh`
-  (PowerShell 7), which stock Windows doesn't ship — so machines with
-  only `powershell.exe` 5.1 failed every external launch outright.
-  The runner now spawns the shell **directly** in a fresh console
-  (`CREATE_NEW_CONSOLE`) with a `pwsh → powershell → cmd /K` fallback
-  chain — a real, long-lived, killable PID, so the launch↔stop toggle
-  and force-kill work end-to-end. (`src-tauri/src/runner.rs`)
+- **Markdown is no longer treated as runnable.** README/CLAUDE fenced
+  shell blocks were turned into Play-button "actions" (often broken doc
+  examples like `source .venv/bin/activate`) and tripled on
+  case-insensitive Windows. The scanner no longer emits them, and legacy
+  rows are purged on startup (no rescan needed).
+- **Package-manager detection in monorepos.** `detect_pm` now walks up to
+  the workspace root and honors the Corepack `packageManager` field, so
+  pnpm/yarn workspace sub-apps no longer misdetect as npm (e.g.
+  `pnpm tauri:dev` instead of `npm …`). The dead bare `tauri` passthrough
+  script is dropped. A scanner-version stamp in the signature makes a
+  rescan regenerate stale commands. (`src-tauri/src/scanner/runnables.rs`)
+- **Doubled `[process exited]` / racing shells.** The embedded terminal
+  spawned each command twice (two run paths + React StrictMode). Single
+  spawn path now, idempotent backend, and StrictMode removed so dev
+  matches the shipped build.
+- **Crash hardening.** Mutex `lock().unwrap()` sites in the PTY + external-
+  launch trackers recover from poisoning instead of crashing. GitHub
+  clone destination paths use the cross-platform `joinPath`.
 
 ## [0.2.4] — 2026-05-22
 
