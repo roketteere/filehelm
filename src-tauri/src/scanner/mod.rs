@@ -72,7 +72,7 @@ impl ActionKind {
 
     pub fn from_name(name: &str) -> Self {
         let n = name.to_ascii_lowercase();
-        if n == "dev" || n.starts_with("dev:") || n.contains("start") || n.contains("serve") {
+        if n.contains("dev") || n.contains("start") || n.contains("serve") {
             ActionKind::Dev
         } else if n.contains("build") || n.contains("compile") || n.contains("bundle") {
             ActionKind::Build
@@ -272,7 +272,16 @@ fn compute_signature(path: &Path) -> AppResult<String> {
         "README.md",
         "CLAUDE.md",
     ];
+    // @inv: bump SCANNER_SIGNATURE_VERSION whenever the scanner's *output*
+    // for unchanged manifests changes (action commands, pm detection, etc.).
+    // It's folded into the signature so existing projects re-scan and
+    // regenerate actions on the next `scan_root` — otherwise an unchanged
+    // package.json short-circuits as Unchanged and keeps stale commands
+    // (e.g. the npm→pnpm fix would never take effect).
+    const SCANNER_SIGNATURE_VERSION: &[u8] = b"scanner-2";
     let mut hasher = Sha256::new();
+    hasher.update(SCANNER_SIGNATURE_VERSION);
+    hasher.update([0]);
     for f in SIGNATURE_FILES {
         let p = path.join(f);
         if let Ok(bytes) = std::fs::read(&p) {

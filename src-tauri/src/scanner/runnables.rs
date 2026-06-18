@@ -18,6 +18,15 @@ pub fn extract(path: &Path) -> AppResult<Vec<Runnable>> {
                 if let Some(scripts) = pkg.scripts {
                     let pm = detect_pm(path);
                     for (name, cmd) in scripts {
+                        // The bare `tauri` passthrough script (`"tauri":
+                        // "tauri"`) does nothing on its own — you need
+                        // `tauri dev` / `tauri build`. Projects ship those
+                        // as `tauri:dev` / `tauri:build` scripts (surfaced
+                        // normally below), so skip the useless bare one
+                        // rather than show a Play button that no-ops.
+                        if name == "tauri" {
+                            continue;
+                        }
                         let kind = ActionKind::from_name(&name);
                         out.push(Runnable {
                             label: format!("{pm} {name}"),
@@ -215,15 +224,58 @@ pub fn extract(path: &Path) -> AppResult<Vec<Runnable>> {
     Ok(out)
 }
 
+/// Detect the package manager for a JS project, returning the script-run
+/// prefix ("pnpm", "yarn", "bun run", "npm run").
+///
+/// @brk: monorepos keep the lockfile + workspace manifest at the WORKSPACE
+/// ROOT, not in each app — e.g. turdmod/apps/turdmod-manager has only a
+/// package.json while turdmod/ has pnpm-lock.yaml. Checking only `path`
+/// misdetected every workspace sub-app as npm. So we walk UP from the
+/// project dir. The Corepack `packageManager` field (this package.json or
+/// an ancestor's) is the most explicit signal and wins over a lockfile.
 fn detect_pm(path: &Path) -> &'static str {
-    if path.join("pnpm-lock.yaml").exists() || path.join("pnpm-workspace.yaml").exists() {
-        "pnpm"
-    } else if path.join("yarn.lock").exists() {
-        "yarn"
-    } else if path.join("bun.lockb").exists() {
-        "bun"
+    let mut dir = Some(path);
+    let mut depth = 0;
+    while let Some(d) = dir {
+        if let Some(pm) = pm_from_package_json(d) {
+            return pm;
+        }
+        if d.join("pnpm-lock.yaml").exists() || d.join("pnpm-workspace.yaml").exists() {
+            return "pnpm";
+        }
+        if d.join("yarn.lock").exists() {
+            return "yarn";
+        }
+        if d.join("bun.lockb").exists() || d.join("bun.lock").exists() {
+            return "bun run";
+        }
+        if d.join("package-lock.json").exists() {
+            return "npm run";
+        }
+        depth += 1;
+        if depth > 8 {
+            break;
+        }
+        dir = d.parent();
+    }
+    "npm run"
+}
+
+/// Read the Corepack `"packageManager": "pnpm@9.x"` field if present.
+fn pm_from_package_json(dir: &Path) -> Option<&'static str> {
+    let text = std::fs::read_to_string(dir.join("package.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let pm = v.get("packageManager")?.as_str()?;
+    if pm.starts_with("pnpm") {
+        Some("pnpm")
+    } else if pm.starts_with("yarn") {
+        Some("yarn")
+    } else if pm.starts_with("bun") {
+        Some("bun run")
+    } else if pm.starts_with("npm") {
+        Some("npm run")
     } else {
-        "npm run"
+        None
     }
 }
 
