@@ -17,12 +17,11 @@ function monoFontFamily(): string {
 
 interface Props {
   sessionId: string;
-  cwd: string;
-  command: string;
+  actionId: number;
   onExit?: () => void;
 }
 
-export function EmbeddedTerminal({ sessionId, cwd, command, onExit }: Props) {
+export function EmbeddedTerminal({ sessionId, actionId, onExit }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -81,11 +80,12 @@ export function EmbeddedTerminal({ sessionId, cwd, command, onExit }: Props) {
           onExit?.();
         },
       );
-      // Kick off the process.
-      const cols = term.cols;
-      const rows = term.rows;
+      // Spawn the process here — AFTER the output listener is attached, so
+      // no early output is missed — and ONLY here (single spawn path). The
+      // backend is idempotent per session id, so React StrictMode's effect
+      // re-run in dev is a harmless no-op rather than a second racing shell.
       try {
-        await ipc.ptySpawn({ sessionId, cwd, command, rows, cols });
+        await ipc.runActionEmbedded(actionId, sessionId, term.rows, term.cols);
       } catch (e) {
         term.writeln(`\x1b[31mfilehelm: ${String(e)}\x1b[0m`);
       }
@@ -98,7 +98,10 @@ export function EmbeddedTerminal({ sessionId, cwd, command, onExit }: Props) {
       window.removeEventListener("resize", onWinResize);
       if (unlisten) unlisten();
       if (unlistenExit) unlistenExit();
-      ipc.ptyKill(sessionId).catch(() => {});
+      // Do NOT ptyKill here. The session lifecycle is owned explicitly by
+      // the Stop/Close buttons and run-replacement (all call ptyKill). A
+      // StrictMode unmount/remount must not tear down the live process —
+      // that's what previously killed the session mid-run.
       term.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

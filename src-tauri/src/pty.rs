@@ -35,6 +35,14 @@ pub struct PtyExit {
     pub code: Option<i32>,
 }
 
+/// Spawn a PTY session for `session_id`. Returns `true` if a new session
+/// was created, `false` if one with that id already existed (idempotent).
+///
+/// @inv: one shell per session_id. The frontend can call this more than
+/// once for the same id (React StrictMode re-runs effects in dev; belt-
+/// and-suspenders against double run paths). Without this guard, two
+/// `cmd /C <command>` shells raced over one ConPTY → flaky "parameter is
+/// incorrect" / arg errors that sometimes resolved and sometimes didn't.
 pub fn spawn<R: Runtime>(
     app: AppHandle<R>,
     session_id: String,
@@ -42,7 +50,14 @@ pub fn spawn<R: Runtime>(
     command: String,
     rows: u16,
     cols: u16,
-) -> AppResult<()> {
+) -> AppResult<bool> {
+    if SESSIONS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains_key(&session_id)
+    {
+        return Ok(false);
+    }
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -121,7 +136,7 @@ pub fn spawn<R: Runtime>(
         );
     });
 
-    Ok(())
+    Ok(true)
 }
 
 pub fn write(session_id: &str, data: &str) -> AppResult<()> {

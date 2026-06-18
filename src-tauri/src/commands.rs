@@ -1174,7 +1174,8 @@ pub struct PtySpawnArgs {
 
 #[tauri::command]
 pub async fn pty_spawn(args: PtySpawnArgs, app: tauri::AppHandle) -> AppResult<()> {
-    pty::spawn(app, args.session_id, args.cwd, args.command, args.rows, args.cols)
+    pty::spawn(app, args.session_id, args.cwd, args.command, args.rows, args.cols)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1215,17 +1216,21 @@ pub async fn run_action_embedded(
             .fetch_one(&state().db)
             .await?
     };
-    pty::spawn(app, session_id, wd_string, row.command.clone(), rows, cols)?;
-    sqlx::query("INSERT INTO run_history (project_id, action_id, command) VALUES (?, ?, ?)")
-        .bind(row.project_id)
-        .bind(row.id)
-        .bind(&row.command)
-        .execute(&state().db)
-        .await?;
-    sqlx::query("UPDATE projects SET last_opened_at = CURRENT_TIMESTAMP WHERE id = ?")
-        .bind(row.project_id)
-        .execute(&state().db)
-        .await?;
+    // Idempotent spawn: a duplicate call for the same session (StrictMode
+    // effect re-run) is a no-op and must NOT double-log run history.
+    let spawned = pty::spawn(app, session_id, wd_string, row.command.clone(), rows, cols)?;
+    if spawned {
+        sqlx::query("INSERT INTO run_history (project_id, action_id, command) VALUES (?, ?, ?)")
+            .bind(row.project_id)
+            .bind(row.id)
+            .bind(&row.command)
+            .execute(&state().db)
+            .await?;
+        sqlx::query("UPDATE projects SET last_opened_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(row.project_id)
+            .execute(&state().db)
+            .await?;
+    }
     Ok(())
 }
 

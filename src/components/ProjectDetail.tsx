@@ -208,10 +208,10 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
             return next;
           });
         }
+        // The actual spawn happens in <EmbeddedTerminal> (single spawn
+        // path, after its output listener is attached). We just open the
+        // session panel; the terminal mounts and runs it.
         const sessionId = `embed-${a.id}-${Date.now()}`;
-        const cols = 100;
-        const rows = 24;
-        await ipc.runActionEmbedded(a.id, sessionId, rows, cols);
         setEmbeddedSession({
           id: sessionId,
           command: a.command,
@@ -556,19 +556,16 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
                               onSelect={async () => {
                                 // One-off override: launch in embedded mode
                                 // regardless of the user's persisted toggle.
-                                try {
-                                  const sessionId = `embed-${a.id}-${Date.now()}`;
-                                  await ipc.runActionEmbedded(a.id, sessionId, 24, 100);
-                                  setEmbeddedSession({
-                                    id: sessionId,
-                                    command: a.command,
-                                    cwd: a.working_dir ?? project.abs_path,
-                                    actionId: a.id,
-                                  });
-                                  setRunning((prev) => new Set(prev).add(a.id));
-                                } catch (e) {
-                                  setError(String(e));
-                                }
+                                // Spawn happens in <EmbeddedTerminal>; just
+                                // open the session panel.
+                                const sessionId = `embed-${a.id}-${Date.now()}`;
+                                setEmbeddedSession({
+                                  id: sessionId,
+                                  command: a.command,
+                                  cwd: a.working_dir ?? project.abs_path,
+                                  actionId: a.id,
+                                });
+                                setRunning((prev) => new Set(prev).add(a.id));
                               }}
                             >
                               Run in embedded terminal
@@ -713,8 +710,7 @@ export function ProjectDetail({ project, onRescanned, onPinChanged }: Props) {
             <Suspense fallback={<div className="grid h-full place-items-center text-xs text-muted-foreground">loading terminal…</div>}>
               <EmbeddedTerminal
                 sessionId={embeddedSession.id}
-                cwd={embeddedSession.cwd}
-                command={embeddedSession.command}
+                actionId={embeddedSession.actionId}
                 onExit={() => {
                   /* keep panel open so user can read the final output */
                 }}
