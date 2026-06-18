@@ -18,7 +18,7 @@ use crate::error::{AppError, AppResult};
 struct Session {
     master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn std::io::Write + Send>,
-    _child: Box<dyn portable_pty::Child + Send + Sync>,
+    child: Box<dyn portable_pty::Child + Send + Sync>,
 }
 
 static SESSIONS: Lazy<Mutex<HashMap<String, Session>>> = Lazy::new(|| Mutex::new(HashMap::new()));
@@ -86,7 +86,7 @@ pub fn spawn<R: Runtime>(
         Session {
             master: pair.master,
             writer,
-            _child: child,
+            child,
         },
     );
 
@@ -154,9 +154,28 @@ pub fn resize(session_id: &str, rows: u16, cols: u16) -> AppResult<()> {
 
 pub fn kill(session_id: &str) -> AppResult<()> {
     let mut sessions = SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
-    if sessions.remove(session_id).is_some() {
-        Ok(())
-    } else {
-        Err(AppError::NotFound(format!("pty session {session_id}")))
+    let Some(mut s) = sessions.remove(session_id) else {
+        return Err(AppError::NotFound(format!("pty session {session_id}")));
+    };
+    // Best-effort whole-tree kill. Dropping the PTY master closes ConPTY,
+    // which usually ends the foreground shell, but grandchildren (e.g. vite
+    // + cargo spawned by `cmd /C pnpm tauri:dev`) can orphan — so taskkill
+    // /T /F the process tree by PID on Windows. silent_command keeps the
+    // taskkill console from flashing.
+    if let Some(pid) = s.child.process_id() {
+        #[cfg(target_os = "windows")]
+        {
+            let _ = crate::proc::silent_command("taskkill")
+                .args(["/T", "/F", "/PID", &pid.to_string()])
+                .output();
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("kill")
+                .args(["-TERM", &pid.to_string()])
+                .output();
+        }
     }
+    let _ = s.child.kill();
+    Ok(())
 }

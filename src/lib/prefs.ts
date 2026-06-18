@@ -61,9 +61,13 @@ export const prefs = {
 
   embeddedRunner(): boolean {
     try {
-      return localStorage.getItem(KEYS.embeddedRunner) === "true";
+      // Default ON: the in-app terminal is the only run mode with a
+      // reliable Stop button (it owns the PID + detects exit). An explicit
+      // user choice in Settings (either value) is still honored.
+      const v = localStorage.getItem(KEYS.embeddedRunner);
+      return v === null ? true : v === "true";
     } catch {
-      return false;
+      return true;
     }
   },
   setEmbeddedRunner(v: boolean) {
