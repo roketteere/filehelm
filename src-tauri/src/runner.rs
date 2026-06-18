@@ -85,11 +85,29 @@ const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 #[cfg(target_os = "windows")]
 fn spawn_child(working_dir: &Path, command: &str, choice: TerminalChoice) -> AppResult<Child> {
     use std::os::windows::process::CommandExt;
-    // pwsh (PowerShell 7) is preferred when present, but stock Windows only
-    // ships powershell.exe (5.1) — hardcoding pwsh failed every launch on
-    // machines without PS7. Try pwsh → powershell → cmd; spawn() errors fast
-    // when a shell isn't on PATH, so .or_else falls through cleanly.
-    let shell = |bin: &str| {
+    let wd = working_dir.to_string_lossy();
+
+    // Prefer Windows Terminal (wt.exe) — the modern, tabbed terminal Win11
+    // users mean by "my terminal", instead of the legacy blue console.
+    // Fire-and-forget runs (see ProjectDetail) mean we no longer track the
+    // child PID, so it's now fine that wt.exe hands the session to the
+    // Terminal broker and exits immediately. `wt -d <dir> powershell -NoExit
+    // -Command <cmd>` opens a tab in <dir> and runs the command, leaving it
+    // open afterward. powershell.exe (5.1) is guaranteed present; we don't
+    // force pwsh so this never fails for lack of PS7.
+    // wt parses ';' as a pane/tab separator even inside the commandline, so
+    // escape it to '\;' — the broker unescapes it back to ';' for the shell.
+    let wt_cmd = command.replace(';', "\\;");
+    let try_wt = || {
+        Command::new("wt.exe")
+            .args(["-d", wd.as_ref(), "powershell.exe", "-NoExit", "-Command", &wt_cmd])
+            .spawn()
+    };
+
+    // Direct console fallback when Windows Terminal isn't installed. pwsh
+    // (PS7) preferred, then powershell (5.1), then cmd — spawn() errors fast
+    // when a shell isn't on PATH so .or_else falls through cleanly.
+    let console = |bin: &str| {
         Command::new(bin)
             .args(["-NoExit", "-Command", command])
             .current_dir(working_dir)
@@ -97,12 +115,13 @@ fn spawn_child(working_dir: &Path, command: &str, choice: TerminalChoice) -> App
             .spawn()
     };
     match choice {
-        TerminalChoice::Auto | TerminalChoice::WindowsTerminal => shell("pwsh")
-            .or_else(|_| shell("powershell"))
+        TerminalChoice::Auto | TerminalChoice::WindowsTerminal => try_wt()
+            .or_else(|_| console("pwsh"))
+            .or_else(|_| console("powershell"))
             .or_else(|_| spawn_cmd(working_dir, command))
             .map_err(AppError::Io),
-        TerminalChoice::Powershell => shell("pwsh")
-            .or_else(|_| shell("powershell"))
+        TerminalChoice::Powershell => console("pwsh")
+            .or_else(|_| console("powershell"))
             .map_err(AppError::Io),
         TerminalChoice::Cmd => spawn_cmd(working_dir, command).map_err(AppError::Io),
     }

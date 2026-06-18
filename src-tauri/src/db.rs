@@ -37,6 +37,7 @@ pub async fn init(data_dir: &Path) -> AppResult<SqlitePool> {
     match sqlx::migrate!("./migrations").run(&pool).await {
         Ok(()) => {
             tracing::info!("db::init step 3: migrations applied");
+            purge_legacy_markdown_actions(&pool).await;
             Ok(pool)
         }
         Err(e) if is_migration_drift(&e) => {
@@ -63,6 +64,31 @@ pub async fn init(data_dir: &Path) -> AppResult<SqlitePool> {
             Ok(pool)
         }
         Err(e) => Err(e.into()),
+    }
+}
+
+/// One-time cleanup of legacy README/CLAUDE-derived auto-actions.
+///
+/// Older builds turned every fenced shell block in README.md / CLAUDE.md
+/// into a runnable "action" with a Play button. Those are docs examples,
+/// not real run commands (e.g. `source .venv/bin/activate`, doc
+/// placeholders) — they open a terminal that errors or does nothing, and
+/// on case-insensitive Windows they were inserted 3× (README.md /
+/// Readme.md / readme.md all resolve to one file). The scanner no longer
+/// emits them, but existing DBs carry thousands. Purge them on every
+/// launch (idempotent, cheap, keyed on the `*.md#N` source). User-created
+/// overrides (is_user_override = 1) are never touched. Non-fatal: a
+/// failure here must not block startup.
+async fn purge_legacy_markdown_actions(pool: &SqlitePool) {
+    match sqlx::query("DELETE FROM project_actions WHERE is_user_override = 0 AND source LIKE '%.md#%'")
+        .execute(pool)
+        .await
+    {
+        Ok(r) if r.rows_affected() > 0 => {
+            tracing::info!(rows = r.rows_affected(), "purged legacy markdown-derived actions");
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!(?e, "purge_legacy_markdown_actions failed (non-fatal)"),
     }
 }
 
